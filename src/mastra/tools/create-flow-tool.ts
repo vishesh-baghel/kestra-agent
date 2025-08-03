@@ -6,6 +6,15 @@ import * as yaml from "yaml";
 const KESTRA_BASE_URL = process.env.KESTRA_BASE_URL || "http://localhost:8100";
 
 /**
+ * Generate a random flow ID with timestamp and random suffix
+ */
+function generateRandomFlowId(): string {
+  const timestamp = Date.now().toString(36);
+  const randomSuffix = Math.random().toString(36).substring(2, 8);
+  return `flow-${timestamp}-${randomSuffix}`;
+}
+
+/**
  * Tool to create a new Kestra flow from YAML definition
  * This tool should be used only once at the start of a conversation to create a new flow
  */
@@ -16,6 +25,7 @@ export const createFlowTool = createTool({
     flowYaml: z.string().describe("The complete YAML flow definition to create"),
     namespace: z.string().default("company.team").describe("Kestra namespace for the flow"),
     flowId: z.string().optional().describe("Specific flow ID (will be extracted from YAML if not provided)"),
+    userProvidedName: z.string().optional().describe("User-provided name for the flow (will be converted to kebab-case for flowId)"),
   }),
   outputSchema: z.object({
     success: z.boolean().describe("Whether the flow was successfully created"),
@@ -26,7 +36,7 @@ export const createFlowTool = createTool({
     validationErrors: z.array(z.string()).describe("YAML validation errors"),
     flowUrl: z.string().optional().describe("URL to view the flow in Kestra UI"),
   }),
-  execute: async ({ context: { flowYaml, namespace, flowId } }) => {
+  execute: async ({ context: { flowYaml, namespace, flowId, userProvidedName } }) => {
     const errors: string[] = [];
     const validationErrors: string[] = [];
     
@@ -69,20 +79,70 @@ export const createFlowTool = createTool({
         };
       }
       
-      const finalFlowId = flowId || parsedYaml.id;
+      // Determine the flow ID to use
+      let finalFlowId = flowId || parsedYaml.id;
+      
+      // If user provided a name, convert it to kebab-case and use as flowId
+      if (userProvidedName && !flowId) {
+        finalFlowId = userProvidedName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+      }
+      
+      // If no flowId determined yet, generate a random one
+      if (!finalFlowId) {
+        finalFlowId = generateRandomFlowId();
+      }
+      
       const finalNamespace = parsedYaml.namespace || namespace;
       
-      // Step 3: Create flow in Kestra
-      try {
-        const createResponse = await axios.post(
-          `${KESTRA_BASE_URL}/api/v1/flows`,
-          flowYaml,
-          {
-            headers: {
-              "Content-Type": "application/x-yaml",
-            },
+      // Update the YAML with the final flowId
+      const updatedYaml = flowYaml.replace(/^id:\s*.*$/m, `id: ${finalFlowId}`);
+      
+      // Step 3: Create flow in Kestra with retry logic for ID conflicts
+      const attemptCreateFlow = async (yamlContent: string, attemptFlowId: string): Promise<any> => {
+        try {
+          const createResponse = await axios.post(
+            `${KESTRA_BASE_URL}/api/v1/flows`,
+            yamlContent,
+            {
+              headers: {
+                "Content-Type": "application/x-yaml",
+              },
+            }
+          );
+          return { success: true, response: createResponse, flowId: attemptFlowId };
+        } catch (error: any) {
+          const errorMessage = error.response?.data?.message || error.message || "";
+          
+          // Check if error is due to flow ID already existing
+          if (errorMessage.includes("already exists") || errorMessage.includes("flowId already exists") || error.response?.status === 409) {
+            return { success: false, isConflict: true, error: errorMessage };
           }
-        );
+          
+          return { success: false, isConflict: false, error: errorMessage };
+        }
+      };
+      
+      // First attempt with the determined flow ID
+      let result = await attemptCreateFlow(updatedYaml, finalFlowId);
+      
+      // If there's a conflict, try with a random flow ID
+      if (!result.success && result.isConflict) {
+        const randomFlowId = generateRandomFlowId();
+        const randomYaml = updatedYaml.replace(/^id:\s*.*$/m, `id: ${randomFlowId}`);
+        result = await attemptCreateFlow(randomYaml, randomFlowId);
+        
+        if (result.success) {
+          // Add a note about the fallback
+          errors.push(`Original flow ID '${finalFlowId}' already exists, used random ID '${randomFlowId}' instead`);
+          finalFlowId = randomFlowId;
+        }
+      }
+      
+      if (result.success) {
+        const createResponse = result.response;
         
         if (createResponse.status === 200 || createResponse.status === 201) {
           return {
@@ -90,7 +150,7 @@ export const createFlowTool = createTool({
             flowId: finalFlowId,
             namespace: finalNamespace,
             status: "CREATED",
-            errors: [],
+            errors,
             validationErrors: [],
             flowUrl: `${KESTRA_BASE_URL}/ui/flows/${finalNamespace}/${finalFlowId}`,
           };
@@ -104,8 +164,9 @@ export const createFlowTool = createTool({
             validationErrors: [],
           };
         }
-      } catch (createError: any) {
-        const errorMessage = createError.response?.data?.message || createError.message || "Unknown error during flow creation";
+      } else {
+        // Handle the case where both attempts failed
+        const errorMessage = result.error || "Unknown error during flow creation";
         errors.push(`Flow creation failed: ${errorMessage}`);
         
         return {
