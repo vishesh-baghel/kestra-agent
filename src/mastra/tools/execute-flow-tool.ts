@@ -20,9 +20,7 @@ export const executeFlowTool = createTool({
       .describe("Input values for the flow execution"),
   }),
   outputSchema: z.object({
-    success: z
-      .boolean()
-      .describe("Whether the flow was successfully executed"),
+    success: z.boolean().describe("Whether the flow was successfully executed"),
     executionId: z
       .string()
       .optional()
@@ -92,23 +90,32 @@ export const executeFlowTool = createTool({
 
       // Step 2: Execute the workflow
       try {
-        const executeUrl = `${KESTRA_BASE_URL}/api/v1/executions/${namespace}/${flowId}`;
-        const executeResponse = await axios.post(executeUrl, inputs || {}, {
+        const executeUrl = `${KESTRA_BASE_URL}/api/v1/main/executions/${namespace}/${flowId}`;
+        
+        // Prepare form data for multipart/form-data as required by Kestra API
+        const formData = new FormData();
+        if (inputs) {
+          Object.entries(inputs).forEach(([key, value]) => {
+            formData.append(key, String(value));
+          });
+        }
+        
+        const executeResponse = await axios.post(executeUrl, formData, {
           headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Type": "multipart/form-data",
           },
         });
 
         const execution = executeResponse.data;
         const executionId = execution.id;
-        const executionUrl = `${KESTRA_BASE_URL}/ui/executions/${namespace}/${flowId}/${executionId}`;
+        const executionUrl = `${KESTRA_BASE_URL}/ui/main/executions/${namespace}/${flowId}/${executionId}`;
 
         // Wait a moment for execution to start
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
         // Get updated execution status
         const statusResponse = await axios.get(
-          `${KESTRA_BASE_URL}/api/v1/executions/${executionId}`
+          `${KESTRA_BASE_URL}/api/v1/main/executions/${executionId}`
         );
         const currentStatus = statusResponse.data.state.current;
 
