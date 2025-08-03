@@ -108,7 +108,7 @@ export const editFlowTool = createTool({
       // Step 3: Check if workflow exists first
       try {
         const existsResponse = await axios.get(
-          `${KESTRA_BASE_URL}/api/v1/flows/${namespace}/${flowId}`
+          `${KESTRA_BASE_URL}/api/v1/main/flows/${namespace}/${flowId}`
         );
 
         if (existsResponse.status !== 200) {
@@ -155,7 +155,7 @@ export const editFlowTool = createTool({
       // Step 4: Update workflow in Kestra
       try {
         const updateResponse = await axios.put(
-          `${KESTRA_BASE_URL}/api/v1/flows/${namespace}/${flowId}`,
+          `${KESTRA_BASE_URL}/api/v1/main/flows/${namespace}/${flowId}`,
           flowYaml,
           {
             headers: {
@@ -172,7 +172,7 @@ export const editFlowTool = createTool({
             status: "UPDATED",
             errors: [],
             validationErrors: [],
-            flowUrl: `${KESTRA_BASE_URL}/ui/flows/${namespace}/${flowId}`,
+            flowUrl: `${KESTRA_BASE_URL}/ui/main/flows/edit/${namespace}/${flowId}/topology`,
             changes: description || "Workflow updated successfully",
           };
         } else {
