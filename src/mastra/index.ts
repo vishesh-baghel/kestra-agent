@@ -1,20 +1,21 @@
 import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
-import { weatherWorkflow } from "./workflows/weather-workflow";
-import { weatherAgent } from "./agents/weather-agent";
 import { kestraWorkflowGeneration } from "./workflows/kestra-flow-generation";
 import { kestraAgent } from "./agents/kestra-agent";
 
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL || "",
+});
+
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow, kestraWorkflowGeneration },
-  agents: { weatherAgent, kestraAgent },
-  storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:",
-  }),
+  workflows: { kestraWorkflowGeneration },
+  agents: { kestraAgent },
+  storage,
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",
+    overrideDefaultTransports: true,
   }),
 });

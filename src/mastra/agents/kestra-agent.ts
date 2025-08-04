@@ -1,13 +1,24 @@
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { kestraDocsTool } from "../tools/kestra-docs-tool";
-import { createFlowTool } from '../tools/create-flow-tool';
-import { editFlowTool } from '../tools/edit-flow-tool';
-import { executeFlowTool } from '../tools/execute-flow-tool';
-import { executionStatusTool } from '../tools/execution-status-tool';
-import { flowViewTool } from '../tools/flow-view-tool';
+import { SummarizationMetric } from "@mastra/evals/llm";
+import {
+  ContentSimilarityMetric,
+  ToneConsistencyMetric,
+} from "@mastra/evals/nlp";
+import * as tools from "../tools";
+
+import { PgVector, PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL || "",
+});
+
+const vector = new PgVector({
+  connectionString: process.env.DATABASE_URL || "",
+});
+
+const embedder = openai.embedding("text-embedding-3-small");
 
 export const kestraAgent = new Agent({
   name: "Kestra Workflow Agent",
@@ -102,17 +113,29 @@ If a flow ID already exists:
 Remember: Your users may not understand YAML or Kestra syntax, so always explain things in simple, non-technical terms while ensuring the generated workflows are technically correct and functional.
 `,
   model: openai("gpt-4o-mini"),
-  tools: { 
-    kestraDocsTool,
-    createFlowTool,
-    editFlowTool,
-    executeFlowTool,
-    executionStatusTool,
-    flowViewTool
-  },
+  tools,
   memory: new Memory({
-    storage: new LibSQLStore({
-      url: "file:../mastra.db",
-    }),
+    storage,
+    vector,
+    embedder,
+    options: {
+      lastMessages: 5,
+      semanticRecall: {
+        topK: 5,
+        messageRange: 5,
+        scope: "resource",
+      },
+      threads: {
+        generateTitle: true,
+      },
+      workingMemory: {
+        enabled: true,
+      },
+    },
   }),
+  evals: {
+    summarization: new SummarizationMetric(openai("gpt-4o-mini")),
+    contentSimilarity: new ContentSimilarityMetric(),
+    tone: new ToneConsistencyMetric(),
+  },
 });
