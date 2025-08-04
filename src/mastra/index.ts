@@ -2,12 +2,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { kestraWorkflowGeneration } from "./workflows/kestra-flow-generation";
 import { kestraAgent } from "./agents/kestra-agent";
-
-import { PostgresStore } from "@mastra/pg";
-
-const storage = new PostgresStore({
-  connectionString: process.env.DATABASE_URL || "",
-});
+import { storage } from "./db";
 
 export const mastra = new Mastra({
   workflows: { kestraWorkflowGeneration },
@@ -16,6 +11,5 @@ export const mastra = new Mastra({
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",
-    overrideDefaultTransports: true,
   }),
 });

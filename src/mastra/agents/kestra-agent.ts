@@ -7,18 +7,7 @@ import {
   ToneConsistencyMetric,
 } from "@mastra/evals/nlp";
 import * as tools from "../tools";
-
-import { PgVector, PostgresStore } from "@mastra/pg";
-
-const storage = new PostgresStore({
-  connectionString: process.env.DATABASE_URL || "",
-});
-
-const vector = new PgVector({
-  connectionString: process.env.DATABASE_URL || "",
-});
-
-const embedder = openai.embedding("text-embedding-3-small");
+import { storage, vector, embedder } from "../db";
 
 export const kestraAgent = new Agent({
   name: "Kestra Workflow Agent",
