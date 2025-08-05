@@ -1,7 +1,7 @@
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { openai } from "@ai-sdk/openai";
-import { generateText } from "ai";
+import { kestraFlowDesignAgent, kestraFlowExecutionAgent } from "../agents";
 
 // Step 1: Get user requirements
 const getUserRequirementsStep = createStep({
@@ -43,7 +43,7 @@ const getUserRequirementsStep = createStep({
 // Step 2: Research similar flows
 const researchSimilarFlowsStep = createStep({
   id: "research-similar-flows",
-  description: "Research similar business flows to improve quality using both web search and agent knowledge",
+  description: "Research similar business flows to improve quality using the specialized design agent",
   inputSchema: z.object({
     businessProcess: z.string(),
     processGoals: z.string(),
@@ -51,41 +51,17 @@ const researchSimilarFlowsStep = createStep({
   }),
   outputSchema: z.object({
     researchData: z.any(),
-    webResults: z.array(z.any()),
     bestPractices: z.array(z.string()),
     recommendedTasks: z.array(z.string())
   }),
-  execute: async ({ inputData, mastra }) => {
+  execute: async ({ inputData }) => {
     try {
-      const agent = mastra.getAgent("kestra-agent");
-      let webResults = [];
+      // Use the specialized design agent for research
+      console.log("Using kestraFlowDesignAgent for flow research");
       
-      // Step 1: Perform web search for industry best practices
-      console.log("Performing web search for best practices");
-      try {
-        const webSearchQuery = `business process automation ${inputData.businessProcess} best practices kestra orchestration`;
-        // Import and use the webSearchTool directly
-        const { webSearchTool } = require("../tools/webSearchTool");
-        const webSearchResult = await webSearchTool.execute({
-          context: { query: webSearchQuery },
-          mastra
-        });
-        webResults = webSearchResult?.results || [];
-        console.log(`Found ${webResults.length} web search results`);
-      } catch (webError) {
-        console.error("Web search error:", webError);
-        // Continue with agent research even if web search fails
-      }
+      const researchPrompt = `Research best practices for implementing this business process as a Kestra flow:\n\n"${inputData.businessProcess}"\n\nWith these goals: "${inputData.processGoals}"\n\nIdentify:\n1. Similar workflow patterns\n2. Recommended Kestra tasks\n3. Best practices for implementation\n4. Common pitfalls to avoid\n\nReturn findings in structured format.`;
 
-      // Step 2: Use agent to research and consolidate findings
-      const webInfoText = webResults.length > 0 ?
-        `Consider these web search findings:\n\n${webResults.map((r: any) => 
-          `Source: ${r.title || 'Unknown source'} (${r.url || 'No URL'})\n${r.content || 'No content'}\n\n`
-        ).join('')}` : "";
-
-      const researchPrompt = `Research best practices for implementing this business process as a Kestra flow:\n\n"${inputData.businessProcess}"\n\nWith these goals: "${inputData.processGoals}"\n\n${webInfoText}\n\nIdentify:\n1. Similar workflow patterns\n2. Recommended Kestra tasks\n3. Best practices for implementation\n4. Common pitfalls to avoid\n\nIMPORTANT TOOL USAGE:\n- When researching Kestra task types, use kestraDocsTool ONLY ONCE per task type\n- If kestraDocsTool doesn't return useful information, immediately switch to webSearchTool with query "kestra yaml [task type] example"\n- Do not call the same tool repeatedly for the same information - alternate between tools instead\n\nReturn findings in structured format.`;
-
-      const result = await agent.generate(
+      const result = await kestraFlowDesignAgent.generate(
         [
           {
             role: "user",
@@ -112,7 +88,6 @@ const researchSimilarFlowsStep = createStep({
 
       return {
         researchData: resultObject,
-        webResults,
         bestPractices: resultObject.bestPractices || [],
         recommendedTasks: resultObject.recommendedTasks || []
       };
@@ -120,7 +95,6 @@ const researchSimilarFlowsStep = createStep({
       console.log({ error });
       return {
         researchData: { error: error.message },
-        webResults: [],
         bestPractices: [`Error in research: ${error.message}`],
         recommendedTasks: ["log", "echo"],
       };
@@ -136,7 +110,6 @@ const generateYamlStep = createStep({
     businessProcess: z.string(),
     processGoals: z.string(),
     researchData: z.any(),
-    webResults: z.array(z.any()),
     bestPractices: z.array(z.string()),
     recommendedTasks: z.array(z.string()),
     namespace: z.string().default("company.team"),
@@ -148,18 +121,11 @@ const generateYamlStep = createStep({
     flowId: z.string().describe("Generated flow ID"),
   }),
   execute: async ({ inputData }) => {
-    const { businessProcess, processGoals, namespace, bestPractices, recommendedTasks, flowFeedback, webResults } = inputData;
+    const { businessProcess, processGoals, namespace, bestPractices, recommendedTasks, flowFeedback } = inputData;
 
     // Include feedback for improvement if it exists
     const feedbackSection = flowFeedback
       ? `\nPrevious feedback to incorporate:\n${flowFeedback}\n`
-      : "";
-
-    // Include web research results if available
-    const webResearchSection = webResults && webResults.length > 0
-      ? `\nConsider these web research findings:\n${webResults.map((r: any, i: number) =>
-        `Source ${i + 1}: ${r.title || 'Unknown'} - ${r.url || 'No URL'}\n`
-      ).join('')}\n`
       : "";
 
     const prompt = `
@@ -169,7 +135,6 @@ Business Process: "${businessProcess}"
 Goals: "${processGoals}"
 Namespace: ${namespace}
 ${feedbackSection}
-${webResearchSection}
 Incorporate these best practices:
 ${bestPractices.map((practice) => `- ${practice}`).join("\n")}
 
@@ -191,13 +156,23 @@ IMPORTANT GUIDELINES:
 Return just the YAML flow:
     `;
 
-    const result = await generateText({
-      model: openai("gpt-4o-mini"),
-      prompt,
-    });
+    // Use the specialized design agent to generate the flow YAML
+    const result = await kestraFlowDesignAgent.generate(
+      [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      {
+        experimental_output: z.object({
+          flowYaml: z.string().describe("Generated YAML flow"),
+        }),
+      }
+    );
 
     // Extract flow ID from the generated YAML
-    const yamlText = result.text.trim();
+    const yamlText = result.object?.flowYaml || "id: generated-flow";
     const idMatch = yamlText.match(/id:\s*([^\n]+)/);
     const flowId = idMatch?.[1]?.trim() || "generated-flow";
 
@@ -259,33 +234,73 @@ const approvalStep = createStep({
 // Step 5: Provide guidance and next steps
 const provideGuidanceStep = createStep({
   id: "provide-guidance",
-  description: "Provide user guidance and Kestra UI links",
+  description:
+    "Provide user guidance and Kestra UI links and attempt to create the flow in Kestra",
   inputSchema: z.object({
     approved: z.boolean(),
     flowYaml: z.string(),
     flowId: z.string(),
     namespace: z.string(),
-    needsRefinement: z.boolean()
+    needsRefinement: z.boolean(),
   }),
   outputSchema: z.object({
     message: z.string().describe("Complete guidance message"),
     yaml: z.string().describe("Generated YAML"),
     kestraUrl: z.string().describe("Kestra UI URL"),
     flowUrl: z.string().describe("Direct flow URL"),
+    executionUrl: z
+      .string()
+      .optional()
+      .describe("URL for flow execution if created"),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, mastra }) => {
     const { flowYaml, namespace, flowId, approved } = inputData;
+    let flowUrl = `http://localhost:8100/ui/flows/${namespace}/${flowId}`;
+    let executionUrl = "";
+    let message = "";
 
-    // Only show success message if approved
-    const message = approved ?
-      `Your Kestra flow has been successfully created!\n\nNext steps:\n1. Review the final YAML\n2. Test the flow in your Kestra instance\n3. Monitor execution and results\n\nYou can view and manage your flow in the Kestra UI.` :
-      `The flow was not approved. Please try again with different requirements.`;
+    // Only attempt to create and execute flow if approved
+    if (approved) {
+      try {
+        // Use the execution agent to create the flow in Kestra
+        const createResult = await kestraFlowExecutionAgent.generate(
+          [
+            {
+              role: "user",
+              content: `Please create a new Kestra flow with the following YAML and name it "${flowId}":\n\n${flowYaml}`,
+            },
+          ],
+          {
+            experimental_output: z.object({
+              flowUrl: z.string().optional(),
+              executionUrl: z.string().optional(),
+              success: z.boolean(),
+            }),
+          }
+        );
+
+        // If flow was created successfully, update URLs and message
+        if (createResult.object?.success) {
+          flowUrl = createResult.object?.flowUrl || flowUrl;
+          executionUrl = createResult.object?.executionUrl || "";
+          message = `✅ Your Kestra flow has been successfully created and executed!\n\nNext steps:\n1. Review the final YAML\n2. Monitor execution results\n3. Make any necessary adjustments\n\nYou can view and manage your flow in the Kestra UI.`;
+        } else {
+          message = `✅ Your Kestra flow has been designed, but there was an issue creating it in Kestra.\n\nNext steps:\n1. Review the final YAML\n2. Try creating the flow manually in Kestra UI\n3. Check for syntax errors\n\nYou can access Kestra UI to create your flow.`;
+        }
+      } catch (error) {
+        console.error("Error creating flow:", error);
+        message = `✅ Your Kestra flow has been designed, but there was an error creating it in Kestra.\n\nNext steps:\n1. Review the final YAML\n2. Try creating the flow manually in Kestra UI\n3. Check for syntax errors\n\nYou can access Kestra UI to create your flow.`;
+      }
+    } else {
+      message = `The flow was not approved. Please try again with different requirements.`;
+    }
 
     return {
       message,
       yaml: flowYaml,
       kestraUrl: `http://localhost:8100/ui/flows?namespace=${namespace}`,
-      flowUrl: `http://localhost:8100/ui/flows/${namespace}/${flowId}`,
+      flowUrl,
+      executionUrl,
     };
   },
 });
@@ -304,6 +319,10 @@ const kestraFlowGeneration = createWorkflow({
     yaml: z.string().describe("Generated YAML"),
     kestraUrl: z.string().describe("Kestra UI URL"),
     flowUrl: z.string().describe("Direct flow URL"),
+    executionUrl: z
+      .string()
+      .optional()
+      .describe("URL for flow execution if created"),
   }),
   // Steps are defined in the chain below instead of here
 });
@@ -316,36 +335,38 @@ kestraFlowGeneration
   .then(approvalStep)
   // Conditional loop - if not approved, go back to generate step with feedback
   // Use a simple then instead and handle conditionals inside a custom step
-  .then(createStep({
-    id: "conditional-routing",
-    inputSchema: z.object({
-      approved: z.boolean(),
-      flowFeedback: z.string().optional(),
-      flowYaml: z.string(),
-      flowId: z.string(),
-      businessProcess: z.string(),
-      processGoals: z.string(),
-      researchData: z.any(),
-      bestPractices: z.array(z.string()),
-      recommendedTasks: z.array(z.string()),
-      namespace: z.string().default("company.team")
-    }),
-    outputSchema: z.object({
-      // Same as input schema to pass through all values
-      approved: z.boolean(),
-      flowYaml: z.string(),
-      flowId: z.string(),
-      namespace: z.string(),
-      needsRefinement: z.boolean()
-    }),
-    execute: async ({ inputData }) => {
-      // If approved, continue to guidance, otherwise go back for refinement
-      return {
-        ...inputData,
-        needsRefinement: !inputData.approved
-      };
-    }
-  }))
+  .then(
+    createStep({
+      id: "conditional-routing",
+      inputSchema: z.object({
+        approved: z.boolean(),
+        flowFeedback: z.string().optional(),
+        flowYaml: z.string(),
+        flowId: z.string(),
+        businessProcess: z.string(),
+        processGoals: z.string(),
+        researchData: z.any(),
+        bestPractices: z.array(z.string()),
+        recommendedTasks: z.array(z.string()),
+        namespace: z.string().default("company.team"),
+      }),
+      outputSchema: z.object({
+        // Same as input schema to pass through all values
+        approved: z.boolean(),
+        flowYaml: z.string(),
+        flowId: z.string(),
+        namespace: z.string(),
+        needsRefinement: z.boolean(),
+      }),
+      execute: async ({ inputData }) => {
+        // If approved, continue to guidance, otherwise go back for refinement
+        return {
+          ...inputData,
+          needsRefinement: !inputData.approved,
+        };
+      },
+    })
+  )
   .then(provideGuidanceStep)
   .commit();
 
