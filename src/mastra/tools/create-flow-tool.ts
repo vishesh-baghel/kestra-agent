@@ -17,10 +17,11 @@ function generateRandomFlowId(): string {
 /**
  * Tool to create a new Kestra flow from YAML definition
  * This tool should be used only once at the start of a conversation to create a new flow
+ * Now automatically generates unique flow IDs without requiring user input
  */
 export const createFlowTool = createTool({
   id: "create-flow-tool",
-  description: `Creates a new Kestra flow from YAML definition. This tool validates the YAML syntax and creates the flow in Kestra. Use this tool only once at the start of a conversation to create a new flow. For modifications, use the edit-flow-tool instead.`,
+  description: `Creates a new Kestra flow from YAML definition with an automatically generated unique ID. This tool validates the YAML syntax and creates the flow in Kestra. Use this tool only once at the start of a conversation to create a new flow. For modifications, use the edit-flow-tool instead.`,
   inputSchema: z.object({
     flowYaml: z
       .string()
@@ -33,13 +34,13 @@ export const createFlowTool = createTool({
       .string()
       .optional()
       .describe(
-        "Specific flow ID (will be extracted from YAML if not provided)"
+        "Optional specific flow ID (auto-generated if not provided)"
       ),
-    userProvidedName: z
+    flowPurpose: z
       .string()
       .optional()
       .describe(
-        "User-provided name for the flow (will be converted to kebab-case for flowId)"
+        "Brief description of flow purpose to use in the auto-generated ID"
       ),
   }),
   outputSchema: z.object({
@@ -59,12 +60,12 @@ export const createFlowTool = createTool({
       .describe("URL to view the flow in Kestra UI"),
   }),
   execute: async ({
-    context: { flowYaml, namespace, flowId, userProvidedName },
+    context: { flowYaml, namespace, flowId, flowPurpose },
   }) => {
     console.log(`[CREATE-FLOW-TOOL] Starting execution with params:`);
     console.log(`[CREATE-FLOW-TOOL] - namespace: ${namespace}`);
-    console.log(`[CREATE-FLOW-TOOL] - flowId: ${flowId || "<not provided>"}`);
-    console.log(`[CREATE-FLOW-TOOL] - userProvidedName: ${userProvidedName || "<not provided>"}`);
+    console.log(`[CREATE-FLOW-TOOL] - flowId: ${flowId || "<will be auto-generated>"}`);
+    console.log(`[CREATE-FLOW-TOOL] - flowPurpose: ${flowPurpose || "<not provided>"}`);
     console.log(`[CREATE-FLOW-TOOL] - flowYaml length: ${flowYaml.length} characters`);
     
     const errors: string[] = [];
@@ -132,27 +133,26 @@ export const createFlowTool = createTool({
       
       console.log(`[CREATE-FLOW-TOOL] Flow structure validation successful`);
 
-      // Determine the flow ID to use
-      console.log(`[CREATE-FLOW-TOOL] Determining flow ID...`);
-      let finalFlowId = flowId || parsedYaml.id;
-      console.log(`[CREATE-FLOW-TOOL] Initial flowId value: ${finalFlowId || "<not set>"}`);
-
-      // If user provided a name, convert it to kebab-case and use as flowId
-      if (userProvidedName && !flowId) {
-        const kebabCaseName = userProvidedName
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-        console.log(`[CREATE-FLOW-TOOL] Converting user provided name '${userProvidedName}' to kebab-case: '${kebabCaseName}'`);
-        finalFlowId = kebabCaseName;
-      }
-
-      // If no flowId determined yet, generate a random one
-      if (!finalFlowId) {
-        finalFlowId = generateRandomFlowId();
-        console.log(`[CREATE-FLOW-TOOL] Generated random flowId: ${finalFlowId}`);
+      // Generate a descriptive, unique flow ID
+      console.log(`[CREATE-FLOW-TOOL] Generating unique flow ID...`);
+      let finalFlowId;
+      
+      if (flowId) {
+        // Use provided ID if explicitly given
+        finalFlowId = flowId;
+        console.log(`[CREATE-FLOW-TOOL] Using explicitly provided flowId: ${finalFlowId}`);
       } else {
-        console.log(`[CREATE-FLOW-TOOL] Using flowId: ${finalFlowId}`);
+        // Generate descriptive ID based on purpose or parsed ID
+        const baseId = flowPurpose ? 
+          flowPurpose.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") : 
+          (parsedYaml.id || "flow");
+        
+        // Add unique timestamp and random suffix
+        const timestamp = Date.now().toString(36);
+        const randomSuffix = Math.random().toString(36).substring(2, 5);
+        finalFlowId = `${baseId}-${timestamp}-${randomSuffix}`;
+        
+        console.log(`[CREATE-FLOW-TOOL] Generated unique descriptive flowId: ${finalFlowId}`);
       }
 
       const finalNamespace = parsedYaml.namespace || namespace;

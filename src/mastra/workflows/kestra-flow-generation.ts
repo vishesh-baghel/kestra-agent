@@ -153,7 +153,12 @@ IMPORTANT GUIDELINES:
 - Don't call kestraDocsTool more than once for the same task type
 - If kestraDocsTool doesn't return useful information, immediately try webSearchTool with "kestra yaml [task type] example" as query
 
-Return just the YAML flow:
+DELIVERY INSTRUCTIONS:
+1. After presenting the YAML flow, ALWAYS include this EXACT message:
+   "I've created the YAML flow definition. Would you like me to automatically create and test this flow in Kestra, or would you prefer to implement it yourself using the generated YAML?"
+2. Then wait for the user's explicit response before proceeding
+
+Return the complete YAML flow followed by the user prompt:
     `;
 
     // Use the specialized design agent to generate the flow YAML
