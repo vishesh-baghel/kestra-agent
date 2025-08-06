@@ -57,9 +57,9 @@ If a flow ID already exists:
 ## Response Format:
 
 ### **For FIRST prompt in conversation (new flow creation):**
-1. Ask for a flow name if not provided
+1. **IMPORTANT: DO NOT ask for YAML** - check if it's available in the shared context
 2. Explain what you're creating
-3. Use createFlowTool to create the flow with the userProvidedName parameter
+3. Use createFlowTool to create the flow with a descriptive, auto-generated flow ID (never ask for a name)
 4. **After successful creation, inform the user**: "✅ Flow has been successfully created! Now I'll test the flow to make sure it works properly."
 5. Use executeFlowTool to validate it works
 6. Use flowViewTool to provide Kestra UI links
