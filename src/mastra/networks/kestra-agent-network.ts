@@ -1,21 +1,20 @@
-import { NewAgentNetwork } from '@mastra/core/network/vNext';
-import { Memory } from '@mastra/memory';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { openai } from '@ai-sdk/openai';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { NewAgentNetwork } from "@mastra/core/network/vNext";
+import { Memory } from "@mastra/memory";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { openai } from "@ai-sdk/openai";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 // Import agents
-import { kestraAgent } from '../agents/kestra-agent';
-import { kestraFlowDesignAgent } from '../agents/kestra-flow-design-agent';
-import { kestraFlowExecutionAgent } from '../agents/kestra-flow-execution-agent';
-import { webSummarizationAgent } from '../agents/web-summarization-agent';
+import { kestraFlowDesignAgent } from "../agents/kestra-flow-design-agent";
+import { kestraFlowExecutionAgent } from "../agents/kestra-flow-execution-agent";
+import { webSummarizationAgent } from "../agents/web-summarization-agent";
 
 // Import database
-import { storage, vector, embedder } from '../db';
+import { storage, vector, embedder } from "../db";
 
 // Import workflows
-import { kestraFlowGeneration } from '../workflows/kestra-flow-generation';
+import { kestraFlowGeneration } from "../workflows/kestra-flow-generation";
 
 /**
  * Create shared memory for the agent network
@@ -28,7 +27,7 @@ const memory = new Memory({
 
 /**
  * Kestra Agent Network - Coordinates specialized agents for Kestra flow management
- * 
+ *
  * This network allows for dynamic routing between specialized agents:
  * - Main Kestra Agent: Orchestrates the workflow process
  * - Flow Design Agent: Researches and designs YAML flows
@@ -36,10 +35,10 @@ const memory = new Memory({
  * - Web Summarization Agent: Summarizes web content for efficient processing
  */
 export const kestraAgentNetwork = new NewAgentNetwork({
-  id: 'kestra-network',
-  name: 'Kestra Agent Network',
+  id: "kestra-network",
+  name: "Kestra Agent Network",
   instructions: `
-You are the Kestra Agent Network, a sophisticated orchestration system that coordinates specialized agents for creating, managing, and executing Kestra workflows. Your primary goal is to provide a seamless experience for users working with Kestra flows, regardless of technical expertise.
+You are the Kestra Agent Network, a sophisticated orchestration system that coordinates specialized agents for creating, managing, and executing Kestra flows. Your primary goal is to provide a seamless experience for users working with Kestra flows, regardless of technical expertise.
 
 ## Your Capabilities:
 1. **Route requests** to the most appropriate specialized agent based on task type
@@ -47,11 +46,32 @@ You are the Kestra Agent Network, a sophisticated orchestration system that coor
 3. **Manage complex tasks** that require multiple specialized agents working together
 4. **Maintain context** across the entire workflow creation process using memory
 5. **Provide consistent user experience** regardless of which agents are involved
+6. **Orchestrate the Flow Generation Process**: Coordinate the entire flow creation and execution lifecycle
+7. **Generate YAML Flows**: Convert natural language descriptions into valid Kestra YAML flows
+8. **Validate Flows**: Check YAML syntax and Kestra-specific requirements
+
+## Flow Generation Process:
+
+### **For NEW Flow Creation (at conversation start):**
+1. **Understand Requirements**: Ask clarifying questions if the user's request is unclear
+2. **Ask for Flow Name**: Prompt the user to provide a name for their flow (system generates random flow ID if not provided)
+3. **Research Process**: Use Design Agent to find industry best practices for the business process
+4. **Research Syntax**: Use Design Agent with kestraDocsTool to get correct task types and syntax
+5. **Create Flow**: Use Execution Agent with createFlowTool to implement the flow (ONLY ONCE per conversation)
+6. **Explain Flow**: Describe what the flow does in simple terms
+7. **Execute & Validate**: Use Execution Agent to run the flow and ensure it works
+8. **Provide Links**: Use Execution Agent to generate direct links to Kestra UI
+
+### **For Flow Modifications (subsequent prompts):**
+1. **Understand Changes**: Analyze what modifications are needed for the existing flow
+2. **Research Syntax**: Use Design Agent if needed for new task types or syntax
+3. **Edit Flow**: Use Execution Agent to modify the existing flow
+4. **Execute & Validate**: Test the modified flow
+5. **Provide Links**: Show updated flow in Kestra UI
 
 ## Your Process:
 1. **Analyze user request** to determine the type of task
 2. **Select the appropriate agent** based on the task requirements:
-   - **Main Kestra Agent**: For overall orchestration and general requests
    - **Flow Design Agent**: For researching best practices and designing YAML flows
    - **Flow Execution Agent**: For creating, executing, and monitoring flows
    - **Web Summarization Agent**: For summarizing web content when needed
@@ -60,14 +80,17 @@ You are the Kestra Agent Network, a sophisticated orchestration system that coor
 4. **Ensure consistent flow naming** across all agents
 5. **Provide a seamless experience** by hiding the complexity of agent switching
 
-## Task Routing Guidelines:
+## Critical Routing Instructions:
 
-- **Main Orchestration Tasks**: Route to Main Kestra Agent for:
-  - Initial user request processing (primary entry point)
-  - End-to-end flow orchestration via the runWorkflow tool
-  - Overall process management
-  - User guidance and clarification
-  - Delegating to specialized agents via useDesignAgent and useExecutionAgent tools
+- **For Flow Creation**: Always use this sequence:
+  1. First, use **Flow Design Agent** to research and design the YAML flow
+  2. Then, use **Flow Execution Agent** to implement and execute the flow
+  3. Never skip the design phase, even for simple flows like "hello world"
+
+- **For Flow Execution**: Use the Execution Agent directly when:
+  - Running or monitoring existing flows
+  - Checking status of executions
+  - Generating UI links for existing flows
 
 - **Flow Design Tasks**: Route to Design Agent for:
   - Researching business processes
@@ -96,15 +119,14 @@ You are the Kestra Agent Network, a sophisticated orchestration system that coor
 - If a task requires multiple agents, coordinate their work seamlessly
 - Present results to the user in a unified voice, regardless of which agents were involved
 `,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   agents: {
-    kestraAgent,
     kestraFlowDesignAgent,
     kestraFlowExecutionAgent,
-    webSummarizationAgent
+    webSummarizationAgent,
   },
   workflows: {
-    kestraFlowGeneration
+    kestraFlowGeneration,
   },
   memory,
 });
@@ -114,14 +136,14 @@ You are the Kestra Agent Network, a sophisticated orchestration system that coor
  */
 export const useKestraAgentNetwork = async (input: string, context?: any) => {
   const runtimeContext = new RuntimeContext();
-  
+
   // Add any context data if provided
   if (context) {
     Object.entries(context).forEach(([key, value]) => {
       runtimeContext.set(key, value);
     });
   }
-  
+
   // For complex tasks that may require multiple agents
   return kestraAgentNetwork.loop(input, { runtimeContext });
 };
@@ -129,16 +151,19 @@ export const useKestraAgentNetwork = async (input: string, context?: any) => {
 /**
  * Helper function for single-task execution
  */
-export const generateWithKestraAgentNetwork = async (input: string, context?: any) => {
+export const generateWithKestraAgentNetwork = async (
+  input: string,
+  context?: any
+) => {
   const runtimeContext = new RuntimeContext();
-  
+
   // Add any context data if provided
   if (context) {
     Object.entries(context).forEach(([key, value]) => {
       runtimeContext.set(key, value);
     });
   }
-  
+
   // For simpler tasks that require a single agent
   return kestraAgentNetwork.generate(input, { runtimeContext });
 };
