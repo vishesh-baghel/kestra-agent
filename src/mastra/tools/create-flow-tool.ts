@@ -61,15 +61,24 @@ export const createFlowTool = createTool({
   execute: async ({
     context: { flowYaml, namespace, flowId, userProvidedName },
   }) => {
+    console.log(`[CREATE-FLOW-TOOL] Starting execution with params:`);
+    console.log(`[CREATE-FLOW-TOOL] - namespace: ${namespace}`);
+    console.log(`[CREATE-FLOW-TOOL] - flowId: ${flowId || "<not provided>"}`);
+    console.log(`[CREATE-FLOW-TOOL] - userProvidedName: ${userProvidedName || "<not provided>"}`);
+    console.log(`[CREATE-FLOW-TOOL] - flowYaml length: ${flowYaml.length} characters`);
+    
     const errors: string[] = [];
     const validationErrors: string[] = [];
 
     try {
       // Step 1: Validate YAML syntax
+      console.log(`[CREATE-FLOW-TOOL] Starting YAML validation`);
       let parsedYaml: any;
       try {
         parsedYaml = yaml.parse(flowYaml);
+        console.log(`[CREATE-FLOW-TOOL] YAML parsed successfully`);
       } catch (yamlError: any) {
+        console.log(`[CREATE-FLOW-TOOL] YAML parsing failed: ${yamlError.message}`);
         validationErrors.push(`YAML syntax error: ${yamlError.message}`);
         return {
           success: false,
@@ -81,12 +90,20 @@ export const createFlowTool = createTool({
       }
 
       // Step 2: Validate Kestra flow structure
+      console.log(`[CREATE-FLOW-TOOL] Validating Kestra flow structure`);
+      
       if (!parsedYaml.id) {
+        console.log(`[CREATE-FLOW-TOOL] Validation error: Missing 'id' field`);
         validationErrors.push("Flow must have an 'id' field");
+      } else {
+        console.log(`[CREATE-FLOW-TOOL] Flow ID from YAML: ${parsedYaml.id}`);
       }
 
       if (!parsedYaml.namespace) {
+        console.log(`[CREATE-FLOW-TOOL] Validation error: Missing 'namespace' field`);
         validationErrors.push("Flow must have a 'namespace' field");
+      } else {
+        console.log(`[CREATE-FLOW-TOOL] Namespace from YAML: ${parsedYaml.namespace}`);
       }
 
       if (
@@ -94,12 +111,16 @@ export const createFlowTool = createTool({
         !Array.isArray(parsedYaml.tasks) ||
         parsedYaml.tasks.length === 0
       ) {
+        console.log(`[CREATE-FLOW-TOOL] Validation error: Missing or empty 'tasks' array`);
         validationErrors.push(
           "Flow must have at least one task in the 'tasks' array"
         );
+      } else {
+        console.log(`[CREATE-FLOW-TOOL] Tasks found in YAML: ${parsedYaml.tasks.length} tasks`);
       }
 
       if (validationErrors.length > 0) {
+        console.log(`[CREATE-FLOW-TOOL] Validation failed with ${validationErrors.length} errors`);
         return {
           success: false,
           namespace,
@@ -108,34 +129,48 @@ export const createFlowTool = createTool({
           validationErrors,
         };
       }
+      
+      console.log(`[CREATE-FLOW-TOOL] Flow structure validation successful`);
 
       // Determine the flow ID to use
+      console.log(`[CREATE-FLOW-TOOL] Determining flow ID...`);
       let finalFlowId = flowId || parsedYaml.id;
+      console.log(`[CREATE-FLOW-TOOL] Initial flowId value: ${finalFlowId || "<not set>"}`);
 
       // If user provided a name, convert it to kebab-case and use as flowId
       if (userProvidedName && !flowId) {
-        finalFlowId = userProvidedName
+        const kebabCaseName = userProvidedName
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-+|-+$/g, "");
+        console.log(`[CREATE-FLOW-TOOL] Converting user provided name '${userProvidedName}' to kebab-case: '${kebabCaseName}'`);
+        finalFlowId = kebabCaseName;
       }
 
       // If no flowId determined yet, generate a random one
       if (!finalFlowId) {
         finalFlowId = generateRandomFlowId();
+        console.log(`[CREATE-FLOW-TOOL] Generated random flowId: ${finalFlowId}`);
+      } else {
+        console.log(`[CREATE-FLOW-TOOL] Using flowId: ${finalFlowId}`);
       }
 
       const finalNamespace = parsedYaml.namespace || namespace;
+      console.log(`[CREATE-FLOW-TOOL] Using namespace: ${finalNamespace}`);
 
       // Update the YAML with the final flowId
       const updatedYaml = flowYaml.replace(/^id:\s*.*$/m, `id: ${finalFlowId}`);
+      console.log(`[CREATE-FLOW-TOOL] Updated YAML with flowId: ${finalFlowId}`);
 
       // Step 3: Create flow in Kestra with retry logic for ID conflicts
+      console.log(`[CREATE-FLOW-TOOL] Preparing to create flow in Kestra`);
       const attemptCreateFlow = async (
         yamlContent: string,
         attemptFlowId: string
       ): Promise<any> => {
+        console.log(`[CREATE-FLOW-TOOL] Attempting to create flow with ID: ${attemptFlowId}`);
         try {
+          console.log(`[CREATE-FLOW-TOOL] Making API request to ${KESTRA_BASE_URL}/api/v1/flows`);
           const createResponse = await axios.post(
             `${KESTRA_BASE_URL}/api/v1/flows`,
             yamlContent,
@@ -145,94 +180,89 @@ export const createFlowTool = createTool({
               },
             }
           );
+          console.log(`[CREATE-FLOW-TOOL] Flow creation successful! Status: ${createResponse.status}`);
           return {
             success: true,
             response: createResponse,
-            flowId: attemptFlowId,
           };
         } catch (error: any) {
-          const errorMessage =
-            error.response?.data?.message || error.message || "";
-
-          // Check if error is due to flow ID already existing
-          if (
-            errorMessage.includes("already exists") ||
-            errorMessage.includes("flowId already exists") ||
-            error.response?.status === 409
-          ) {
-            return { success: false, isConflict: true, error: errorMessage };
+          if (error.response?.status === 409) {
+            // Flow ID conflict
+            console.log(`[CREATE-FLOW-TOOL] Flow ID conflict: '${attemptFlowId}' already exists`);
+            return {
+              success: false,
+              conflict: true,
+              error: `Flow ID '${attemptFlowId}' already exists`,
+            };
           }
-
-          return { success: false, isConflict: false, error: errorMessage };
+          console.log(`[CREATE-FLOW-TOOL] API error: ${error.message}`);
+          return {
+            success: false,
+            conflict: false,
+            error: error.message,
+          };
         }
       };
 
       // First attempt with the determined flow ID
-      let result = await attemptCreateFlow(updatedYaml, finalFlowId);
+      console.log(`[CREATE-FLOW-TOOL] Sending flow creation request...`);
+      let createResult = await attemptCreateFlow(updatedYaml, finalFlowId);
 
-      // If there's a conflict, try with a random flow ID
-      if (!result.success && result.isConflict) {
-        const randomFlowId = generateRandomFlowId();
-        const randomYaml = updatedYaml.replace(
+      // If there's a conflict with the ID, try with a random ID instead
+      if (!createResult.success && createResult.conflict) {
+        const randomId = generateRandomFlowId();
+        console.log(`[CREATE-FLOW-TOOL] Flow ID conflict detected, retrying with random ID: ${randomId}`);
+        const retryYaml = updatedYaml.replace(
           /^id:\s*.*$/m,
-          `id: ${randomFlowId}`
+          `id: ${randomId}`
         );
-        result = await attemptCreateFlow(randomYaml, randomFlowId);
-
-        if (result.success) {
-          // Add a note about the fallback
-          errors.push(
-            `Original flow ID '${finalFlowId}' already exists, used random ID '${randomFlowId}' instead`
-          );
-          finalFlowId = randomFlowId;
-        }
+        errors.push(createResult.error);
+        errors.push(
+          `Trying again with a random ID: ${randomId}`
+        );
+        console.log(`[CREATE-FLOW-TOOL] Sending retry request with random ID...`);
+        createResult = await attemptCreateFlow(retryYaml, randomId);
       }
 
-      if (result.success) {
-        const createResponse = result.response;
-
-        if (createResponse.status === 200 || createResponse.status === 201) {
-          return {
-            success: true,
-            flowId: finalFlowId,
-            namespace: finalNamespace,
-            status: "CREATED",
-            errors,
-            validationErrors: [],
-            flowUrl: `${KESTRA_BASE_URL}/ui/main/flows/edit/${finalNamespace}/${finalFlowId}/topology`,
-          };
-        } else {
-          errors.push(`Failed to create flow: HTTP ${createResponse.status}`);
-          return {
-            success: false,
-            namespace: finalNamespace,
-            status: "CREATION_FAILED",
-            errors,
-            validationErrors: [],
-          };
-        }
-      } else {
-        // Handle the case where both attempts failed
-        const errorMessage =
-          result.error || "Unknown error during flow creation";
-        errors.push(`Flow creation failed: ${errorMessage}`);
-
+      // Handle final result
+      if (!createResult.success) {
+        console.log(`[CREATE-FLOW-TOOL] Flow creation failed: ${createResult.error}`);
+        errors.push(createResult.error);
         return {
           success: false,
           namespace: finalNamespace,
-          status: "CREATION_FAILED",
+          status: "API_ERROR",
           errors,
-          validationErrors: [],
+          validationErrors,
         };
       }
+      
+      console.log(`[CREATE-FLOW-TOOL] Flow creation successful!`);
+
+      // Generate Kestra UI link
+      const kestraUrl = process.env.KESTRA_UI_URL || "http://localhost:8080";
+      const flowUrl = `${kestraUrl}/ui/flows/${finalNamespace}/${finalFlowId}`;
+      console.log(`[CREATE-FLOW-TOOL] Generated flow URL: ${flowUrl}`);
+
+      console.log(`[CREATE-FLOW-TOOL] Returning successful result`);
+      return {
+        success: true,
+        flowId: finalFlowId,
+        namespace: finalNamespace,
+        status: "CREATED",
+        errors,
+        validationErrors,
+        flowUrl,
+      };
     } catch (error: any) {
+      console.log(`[CREATE-FLOW-TOOL] Unexpected error: ${error.message}`);
       errors.push(`Unexpected error: ${error.message}`);
       return {
         success: false,
         namespace,
         status: "ERROR",
         errors,
-        validationErrors: [],
+        validationErrors,
       };
     }
   },

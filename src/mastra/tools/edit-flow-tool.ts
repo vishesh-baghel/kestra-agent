@@ -41,15 +41,24 @@ export const editFlowTool = createTool({
   execute: async ({
     context: { flowYaml, namespace, flowId, description },
   }) => {
+    console.log(`[EDIT-FLOW-TOOL] Starting execution with params:`);
+    console.log(`[EDIT-FLOW-TOOL] - namespace: ${namespace}`);
+    console.log(`[EDIT-FLOW-TOOL] - flowId: ${flowId}`);
+    console.log(`[EDIT-FLOW-TOOL] - description: ${description || "<not provided>"}`);
+    console.log(`[EDIT-FLOW-TOOL] - flowYaml length: ${flowYaml.length} characters`);
+    
     const errors: string[] = [];
     const validationErrors: string[] = [];
 
     try {
       // Step 1: Validate YAML syntax
+      console.log(`[EDIT-FLOW-TOOL] Starting YAML validation`);
       let parsedYaml: any;
       try {
         parsedYaml = yaml.parse(flowYaml);
+        console.log(`[EDIT-FLOW-TOOL] YAML parsed successfully`);
       } catch (yamlError: any) {
+        console.log(`[EDIT-FLOW-TOOL] YAML parsing failed: ${yamlError.message}`);
         validationErrors.push(`YAML syntax error: ${yamlError.message}`);
         return {
           success: false,
@@ -61,13 +70,21 @@ export const editFlowTool = createTool({
         };
       }
 
-      // Step 2: Validate Kestra workflow structure
+      // Step 2: Validate Kestra flow structure
+      console.log(`[EDIT-FLOW-TOOL] Validating Kestra flow structure`);
+      
       if (!parsedYaml.id) {
-        validationErrors.push("Workflow must have an 'id' field");
+        console.log(`[EDIT-FLOW-TOOL] Validation error: Missing 'id' field`);
+        validationErrors.push("Flow must have an 'id' field");
+      } else {
+        console.log(`[EDIT-FLOW-TOOL] Flow ID from YAML: ${parsedYaml.id}`);
       }
 
       if (!parsedYaml.namespace) {
-        validationErrors.push("Workflow must have a 'namespace' field");
+        console.log(`[EDIT-FLOW-TOOL] Validation error: Missing 'namespace' field`);
+        validationErrors.push("Flow must have a 'namespace' field");
+      } else {
+        console.log(`[EDIT-FLOW-TOOL] Namespace from YAML: ${parsedYaml.namespace}`);
       }
 
       if (
@@ -75,26 +92,36 @@ export const editFlowTool = createTool({
         !Array.isArray(parsedYaml.tasks) ||
         parsedYaml.tasks.length === 0
       ) {
+        console.log(`[EDIT-FLOW-TOOL] Validation error: Missing or empty 'tasks' array`);
         validationErrors.push(
-          "Workflow must have at least one task in the 'tasks' array"
+          "Flow must have at least one task in the 'tasks' array"
         );
+      } else {
+        console.log(`[EDIT-FLOW-TOOL] Tasks found in YAML: ${parsedYaml.tasks.length} tasks`);
       }
 
-      // Ensure the workflow ID matches
+      // Ensure the flow ID matches
       if (parsedYaml.id !== flowId) {
+        console.log(`[EDIT-FLOW-TOOL] ID mismatch - YAML: ${parsedYaml.id}, Provided: ${flowId}`);
         validationErrors.push(
-          `Workflow ID in YAML (${parsedYaml.id}) must match the provided workflow ID (${flowId})`
+          `Flow ID in YAML (${parsedYaml.id}) must match the provided flow ID (${flowId})`
         );
+      } else {
+        console.log(`[EDIT-FLOW-TOOL] Flow ID matches: ${flowId}`);
       }
 
       // Ensure the namespace matches
       if (parsedYaml.namespace !== namespace) {
+        console.log(`[EDIT-FLOW-TOOL] Namespace mismatch - YAML: ${parsedYaml.namespace}, Provided: ${namespace}`);
         validationErrors.push(
           `Namespace in YAML (${parsedYaml.namespace}) must match the provided namespace (${namespace})`
         );
+      } else {
+        console.log(`[EDIT-FLOW-TOOL] Namespace matches: ${namespace}`);
       }
 
       if (validationErrors.length > 0) {
+        console.log(`[EDIT-FLOW-TOOL] Validation failed with ${validationErrors.length} errors`);
         return {
           success: false,
           flowId,
@@ -104,42 +131,49 @@ export const editFlowTool = createTool({
           validationErrors,
         };
       }
+      
+      console.log(`[EDIT-FLOW-TOOL] Flow structure validation successful`);
 
-      // Step 3: Check if workflow exists first
+      // Step 3: Check if flow exists first
+      console.log(`[EDIT-FLOW-TOOL] Checking if flow exists: ${namespace}/${flowId}`);
       try {
         const existsResponse = await axios.get(
           `${KESTRA_BASE_URL}/api/v1/main/flows/${namespace}/${flowId}`
         );
+        console.log(`[EDIT-FLOW-TOOL] Flow exists check successful: ${existsResponse.status}`);
 
         if (existsResponse.status !== 200) {
+          console.log(`[EDIT-FLOW-TOOL] Flow not found with status ${existsResponse.status}`);
           errors.push(
-            `Workflow ${namespace}/${flowId} does not exist. Use create-workflow-tool to create it first.`
+            `Flow ${namespace}/${flowId} does not exist. Use create-flow-tool to create it first.`
           );
           return {
             success: false,
             flowId,
             namespace,
-            status: "WORKFLOW_NOT_FOUND",
+            status: "FLOW_NOT_FOUND",
             errors,
             validationErrors: [],
           };
         }
       } catch (checkError: any) {
         if (checkError.response?.status === 404) {
+          console.log(`[EDIT-FLOW-TOOL] Flow not found (404)`);
           errors.push(
-            `Workflow ${namespace}/${flowId} does not exist. Use create-workflow-tool to create it first.`
+            `Flow ${namespace}/${flowId} does not exist. Use create-flow-tool to create it first.`
           );
           return {
             success: false,
             flowId,
             namespace,
-            status: "WORKFLOW_NOT_FOUND",
+            status: "FLOW_NOT_FOUND",
             errors,
             validationErrors: [],
           };
         } else {
+          console.log(`[EDIT-FLOW-TOOL] API error checking flow: ${checkError.message}`);
           errors.push(
-            `Error checking workflow existence: ${checkError.message}`
+            `Error checking flow existence: ${checkError.message}`
           );
           return {
             success: false,
@@ -152,8 +186,10 @@ export const editFlowTool = createTool({
         }
       }
 
-      // Step 4: Update workflow in Kestra
+      // Step 4: Update flow in Kestra
+      console.log(`[EDIT-FLOW-TOOL] Updating flow in Kestra: ${namespace}/${flowId}`);
       try {
+        console.log(`[EDIT-FLOW-TOOL] Making PUT request to ${KESTRA_BASE_URL}/api/v1/main/flows/${namespace}/${flowId}`);
         const updateResponse = await axios.put(
           `${KESTRA_BASE_URL}/api/v1/main/flows/${namespace}/${flowId}`,
           flowYaml,
@@ -165,6 +201,9 @@ export const editFlowTool = createTool({
         );
 
         if (updateResponse.status === 200) {
+          console.log(`[EDIT-FLOW-TOOL] Flow successfully updated with status ${updateResponse.status}`);
+          const flowUrl = `${KESTRA_BASE_URL}/ui/main/flows/edit/${namespace}/${flowId}/topology`;
+          console.log(`[EDIT-FLOW-TOOL] Generated flow URL: ${flowUrl}`);
           return {
             success: true,
             flowId,
@@ -172,12 +211,13 @@ export const editFlowTool = createTool({
             status: "UPDATED",
             errors: [],
             validationErrors: [],
-            flowUrl: `${KESTRA_BASE_URL}/ui/main/flows/edit/${namespace}/${flowId}/topology`,
-            changes: description || "Workflow updated successfully",
+            flowUrl,
+            changes: description || "Flow updated successfully",
           };
         } else {
+          console.log(`[EDIT-FLOW-TOOL] Flow update failed with status ${updateResponse.status}`);
           errors.push(
-            `Failed to update workflow: HTTP ${updateResponse.status}`
+            `Failed to update flow: HTTP ${updateResponse.status}`
           );
           return {
             success: false,
@@ -192,8 +232,9 @@ export const editFlowTool = createTool({
         const errorMessage =
           updateError.response?.data?.message ||
           updateError.message ||
-          "Unknown error during workflow update";
-        errors.push(`Workflow update failed: ${errorMessage}`);
+          "Unknown error during flow update";
+        console.log(`[EDIT-FLOW-TOOL] API error during flow update: ${errorMessage}`);
+        errors.push(`Flow update failed: ${errorMessage}`);
 
         return {
           success: false,
@@ -205,6 +246,7 @@ export const editFlowTool = createTool({
         };
       }
     } catch (error: any) {
+      console.log(`[EDIT-FLOW-TOOL] Unexpected error: ${error.message}`);
       errors.push(`Unexpected error: ${error.message}`);
       return {
         success: false,

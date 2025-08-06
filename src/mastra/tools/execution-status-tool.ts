@@ -24,15 +24,27 @@ export const executionStatusTool = createTool({
     executionUrl: z.string().optional().describe("URL to view the execution in Kestra UI"),
   }),
   execute: async ({ context: { executionId } }) => {
+    console.log(`[EXECUTION-STATUS-TOOL] Starting execution status check for executionId: ${executionId}`);
     const errors: string[] = [];
     
     try {
+      console.log(`[EXECUTION-STATUS-TOOL] Making API request to Kestra for execution status`);
+      console.log(`[EXECUTION-STATUS-TOOL] GET ${KESTRA_BASE_URL}/api/v1/executions/${executionId}`);
+      
       const statusResponse = await axios.get(`${KESTRA_BASE_URL}/api/v1/executions/${executionId}`);
+      console.log(`[EXECUTION-STATUS-TOOL] Received status response with status code: ${statusResponse.status}`);
+      
       const execution = statusResponse.data;
+      console.log(`[EXECUTION-STATUS-TOOL] Parsed execution data successfully`);
       
       const status = execution.state?.current || "UNKNOWN";
+      console.log(`[EXECUTION-STATUS-TOOL] Execution status: ${status}`);
+      
       const startDate = execution.state?.startDate;
+      console.log(`[EXECUTION-STATUS-TOOL] Start date: ${startDate || 'not available'}`);
+      
       const endDate = execution.state?.endDate;
+      console.log(`[EXECUTION-STATUS-TOOL] End date: ${endDate || 'not available'}`);
       
       // Calculate duration if both start and end dates are available
       let duration: string | undefined;
@@ -41,13 +53,22 @@ export const executionStatusTool = createTool({
         const end = new Date(endDate);
         const durationMs = end.getTime() - start.getTime();
         duration = `${Math.round(durationMs / 1000)}s`;
+        console.log(`[EXECUTION-STATUS-TOOL] Calculated duration: ${duration}`);
+      } else {
+        console.log(`[EXECUTION-STATUS-TOOL] Duration calculation not possible - missing start or end date`);
       }
       
-      // Extract namespace and workflow ID for URL construction
+      // Extract namespace and flow ID for URL construction
       const namespace = execution.namespace;
-      const workflowId = execution.flowId;
-      const executionUrl = `${KESTRA_BASE_URL}/ui/executions/${namespace}/${workflowId}/${executionId}`;
+      console.log(`[EXECUTION-STATUS-TOOL] Namespace: ${namespace}`);
       
+      const flowId = execution.flowId;
+      console.log(`[EXECUTION-STATUS-TOOL] Flow ID: ${flowId}`);
+      
+      const executionUrl = `${KESTRA_BASE_URL}/ui/executions/${namespace}/${flowId}/${executionId}`;
+      console.log(`[EXECUTION-STATUS-TOOL] Generated execution URL: ${executionUrl}`);
+      
+      console.log(`[EXECUTION-STATUS-TOOL] Status check successful, returning results`);
       return {
         success: true,
         executionId,
@@ -60,9 +81,14 @@ export const executionStatusTool = createTool({
       };
       
     } catch (error: any) {
+      console.log(`[EXECUTION-STATUS-TOOL] Error occurred while checking execution status`);
+      
       const errorMessage = error.response?.data?.message || error.message || "Unknown error";
+      console.error(`[EXECUTION-STATUS-TOOL] Error details: ${errorMessage}`);
+      
       errors.push(`Failed to get execution status: ${errorMessage}`);
       
+      console.log(`[EXECUTION-STATUS-TOOL] Returning error response`);
       return {
         success: false,
         executionId,

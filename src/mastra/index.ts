@@ -3,6 +3,7 @@ import { PinoLogger } from "@mastra/loggers";
 import { kestraFlowGeneration } from "./workflows/kestra-flow-generation";
 import * as agents from "./agents";
 import { storage } from "./db";
+import { kestraAgentNetwork } from "./networks/kestra-agent-network";
 
 export const mastra = new Mastra({
   workflows: { kestraFlowGeneration },
@@ -12,4 +13,7 @@ export const mastra = new Mastra({
     name: "Mastra",
     level: "info",
   }),
+  vnext_networks: {
+    "kestra-network": kestraAgentNetwork,
+  },
 });
