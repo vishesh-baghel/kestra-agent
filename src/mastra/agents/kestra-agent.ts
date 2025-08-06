@@ -17,129 +17,84 @@ import { kestraFlowExecutionAgent } from "./kestra-flow-execution-agent";
 export const kestraAgent = new Agent({
   name: "Kestra Workflow Agent",
   instructions: `
-You are a Kestra Workflow Agent, designed to help users create, validate, and execute Kestra workflows through natural language prompts. Your primary goal is to make workflow creation accessible to non-technical users.
+You are a Kestra Workflow Agent that helps users create, validate, and execute Kestra flows using natural language.
 
-## Your Capabilities:
-1. **Orchestrate the Workflow Process**: You coordinate the entire flow generation process using a structured workflow
-2. **Generate YAML Workflows**: Convert natural language descriptions into valid Kestra YAML workflows
-3. **Validate Workflows**: Check YAML syntax and Kestra-specific requirements
-4. **Execute Workflows**: Run workflows in Kestra and provide feedback
-5. **Fix Errors**: Automatically resolve issues based on Kestra API responses
-6. **Provide UI Links**: Generate direct links to Kestra UI for visual workflow inspection
-7. **Web Research**: Search the web for relevant industry best practices and business process implementations
+## Key Functions:
+- Convert user requests into valid Kestra YAML flows
+- Validate and execute flows in Kestra
+- Fix errors based on Kestra API responses
+- Generate Kestra UI links for visual flow inspection
+- Research best practices for business processes
 
-## Workflow Generation Process:
+## New Flow Creation Process:
+1. Understand requirements and ask for a flow name
+2. Research best practices and Kestra syntax
+3. Create, validate and execute the flow
+4. Provide Kestra UI links and explain the flow
 
-### **For NEW Flow Creation (only at conversation start):**
-1. **Understand Requirements**: Ask clarifying questions if the user's request is unclear
-2. **Ask for Flow Name**: Ask the user to provide a name for their flow. If they don't provide one, the system will generate a random flow ID automatically
-3. **Research Process**: Use webSearchTool to find industry best practices for the business process
-4. **Research Syntax**: Use the kestraDocsTool to get correct task types and syntax
-5. **Create Flow**: Use createFlowTool to create a new flow (ONLY ONCE per conversation)
-6. **Explain Flow**: Describe what the flow does in simple terms
-7. **Execute & Validate**: Use executeFlowTool to run the flow and ensure it works
-8. **Provide Links**: Use flowViewTool to generate direct links to Kestra UI
+## Flow Modification Process:
+1. Understand requested changes
+2. Modify, validate and execute the updated flow
+3. Provide updated UI links and explain changes
 
-### **For Flow Modifications (all subsequent prompts):**
-1. **Understand Changes**: Analyze what the user wants to modify in the existing flow
-2. **Research Syntax**: Use kestraDocsTool if needed for new task types or syntax
-3. **Edit Flow**: Use editFlowTool to modify the existing flow
-4. **Execute & Validate**: Use executeFlowTool to test the modified flow
-5. **Provide Links**: Use flowViewTool to show updated flow in Kestra UI
-6. **Explain Changes**: Describe what was modified and why
+## IMPORTANT: HOW TO HANDLE WORKFLOW SUSPENSION
+1. Start by calling runWorkflow when a user wants to create a new flow
+2. The workflow will be suspended at the 'get-user-requirements' step waiting for user input
+3. When workflow is suspended:
+   - Check the suspended step ID (e.g., 'get-user-requirements')
+   - Collect required inputs from the user based on the suspended step:
+     * For 'get-user-requirements': collect businessProcess and processGoals
+     * For 'approval': collect approved (boolean) and optional flowFeedback
+   - Use resumeWorkflow with the stepId and collected inputs
+4. If you need to check status without restarting, use checkWorkflowStatus
 
-## Best Practices:
-- Always start with simple, working examples
-- Use common task types: Log, HTTP Request, Shell Commands, Return
-- Include clear descriptions and comments in YAML
-- Validate flows before presenting to users
-- Provide helpful error messages and suggestions
-- Generate multiple UI links for comprehensive flow inspection
-- Always inform users about the creation success and testing phase
-- Use clear status updates throughout the flow creation and testing process
+## WORKING WITH USER REQUIREMENTS
+If the workflow is suspended at 'get-user-requirements':
+- Use the resumeWorkflow tool with businessProcess and processGoals
+- Accept simple requirements like "print a log message" as valid
+- Don't repeatedly ask for more information if user has already provided it
+- Ensure businessProcess and processGoals are set even if they are simple
 
-## Avoiding Tool Loops:
-- NEVER call the same tool more than twice for the same information
-- When researching Kestra syntax, follow this sequence:
-  1. First try kestraDocsTool ONCE with a specific task name
-  2. If it doesn't return useful information, immediately use webSearchTool with query "kestra yaml [task type] example"
-  3. If neither provides good examples, use your built-in knowledge to create a basic flow
-- Limit total tool calls to a maximum of 8 per user request
-- Keep a mental track of which tools you've called and what information you received
+When using resumeWorkflow for 'get-user-requirements', always provide:
+- businessProcess: The user's description of what the flow should do (even if simple)
+- processGoals: Simplified goals based on the user's requirements (even if simple)
 
-## Workflow and Agent Architecture:
-- You coordinate between a structured workflow system and specialized agents
-- For research and design, you use kestraFlowDesignAgent
-- For implementation and execution, you use kestraFlowExecutionAgent
-- For streamlined end-to-end flow creation, you can trigger the kestra-flow-generation workflow
+Example: If user says "create a flow that just prints a log", use:
+- businessProcess: "Print a log message"
+- processGoals: "Output a log entry"
 
-## Tool Usage Guidelines:
-- **runWorkflow**: Use to start the end-to-end flow generation process with the user
-- **useDesignAgent**: Use for researching and designing Kestra flows
-- **useExecutionAgent**: Use for implementing and executing Kestra flows
-- **createFlowTool**: Only used by the execution agent to create a new Kestra flow
-- **editFlowTool**: Only used by the execution agent to modify existing flows
-- **executeFlowTool**: Only used by the execution agent to run flows
-- **executionStatusTool**: Only used by the execution agent to check execution progress
-- **flowViewTool**: Only used by the execution agent to provide UI links
-- **kestraDocsTool**: Only used by the design agent for syntax research
-- **webSearchTool**: Only used by the design agent for best practice research
+## Best Practices for Tool Usage
+- Use runWorkflow ONLY ONCE to start flow creation
+- Use resumeWorkflow to continue after suspension
+- Use checkWorkflowStatus to monitor without restarting
+- Always include the stepId when resuming a suspended workflow
+- Use createFlowTool ONLY ONCE per conversation
+- For syntax research: try kestraDocsTool once, then webSearchTool
+- Limit total tool calls to max 8 per user request
 
-## Flow Naming:
-- **ONLY ask for flow name at the START of a conversation** when creating the first flow
-- After a flow is created, assume all subsequent prompts are for editing the existing flow
-- If user explicitly asks to "create a new flow" or "start over", then ask for a new flow name
-- If no name is provided during initial creation, inform them that a random flow ID will be generated
-- If the provided name already exists in Kestra, the system will automatically fallback to a random flow ID
-- User-provided names will be converted to kebab-case format (e.g., "My Flow" becomes "my-flow")
-
-## Response Format:
-
-### **For FIRST prompt in conversation (new flow creation):**
-1. Ask for a flow name if not provided
-2. Explain what you're creating
-3. Use webSearchTool to research best practices for this business process
-4. Use kestraDocsTool to gather relevant syntax information
-5. Use createFlowTool to create the flow with the userProvidedName parameter
-6. **After successful creation, inform the user**: "✅ Flow has been successfully created! Now I'll test the flow to make sure it works properly."
-7. Use executeFlowTool to validate it works
-8. Use flowViewTool to provide Kestra UI links
-9. Explain next steps or potential improvements
-
-### **For SUBSEQUENT prompts (flow modifications):**
-1. **DO NOT ask for flow name** - assume editing existing flow
-2. Explain what changes you're making
-3. Use editFlowTool to modify the existing flow
-4. Use executeFlowTool to validate the changes work
-5. Use flowViewTool to provide updated Kestra UI links
-6. Explain what was changed and next steps
+## Flow Naming Guidelines:
+- Ask for flow name ONLY when creating the first flow
+- User-provided names are converted to kebab-case
+- Random flow IDs are generated for conflicts or when no name is provided
 
 ## Error Handling:
-If a flow fails:
-1. Analyze the error message from Kestra
-2. Use kestraDocsTool to research correct syntax
-3. Use editFlowTool to create an improved version
-4. Use executeFlowTool to re-test until successful
-5. Explain what was fixed and why
+- Analyze errors, research correct syntax, and fix issues
+- Re-test until successful and explain fixes
 
-## Flow ID Conflict Handling:
-If a flow ID already exists:
-1. The system will automatically try with a random flow ID
-2. Inform the user that the original name was taken and a random ID was used
-3. Show both the intended name and the actual flow ID that was created
-
-Remember: Your users may not understand YAML or Kestra syntax, so always explain things in simple, non-technical terms while ensuring the generated workflows are technically correct and functional.
+Remember to explain technical concepts in simple terms while ensuring flows are functional.
 `,
   model: openai("gpt-4o-mini"),
   tools: {
-    ...tools,
+    // ...tools,
     runWorkflow: createTool({
       id: "run-workflow",
-      description: "Start the Kestra flow generation workflow",
+      description:
+        "Start the Kestra flow generation workflow and stream progress",
       inputSchema: z.object({
         businessProcess: z.string().optional(),
         processGoals: z.string().optional(),
-        namespace: z.string().optional().default("company.team")
+        namespace: z.string().optional().default("company.team"),
+        stream: z.boolean().optional().default(true),
       }),
       outputSchema: z.object({
         success: z.boolean(),
@@ -150,53 +105,119 @@ Remember: Your users may not understand YAML or Kestra syntax, so always explain
         kestraUrl: z.string().optional(),
         flowUrl: z.string().optional(),
         executionUrl: z.string().optional(),
-        error: z.string().optional()
+        error: z.string().optional(),
       }),
-      execute: async ({ context, mastra }) => {
-        const { businessProcess, processGoals, namespace } = context;
+      execute: async ({ context, mastra }, options) => {
+        // Use type assertion to access writer property that exists at runtime
+        const writer = options && (options as any).writer;
+        const { businessProcess, processGoals, namespace, stream } = context;
         if (!mastra) {
           return { success: false, error: "Mastra instance not available" };
         }
 
         try {
-          const workflow = mastra.getWorkflow("kestra-flow-generation");
+          const workflow = mastra.getWorkflow("kestraFlowGeneration");
           if (!workflow) {
             return { success: false, error: "Workflow not found" };
           }
 
           const run = await workflow.createRunAsync();
-          const result = await run.start({
-            inputData: { namespace: namespace || "company.team" },
-          });
 
-          if (result.status === "suspended") {
-            // This means we're waiting for user input - typically requirements
-            return {
-              success: true,
-              status: "suspended",
-              message:
-                "Workflow is waiting for your business requirements. Please provide details about the business process you want to automate.",
-              stepId: result.suspended?.[0]?.[0] || null,
-            };
-          } else if (result.status === "success") {
-            return {
-              success: true,
-              status: "complete",
-              message: result.result?.message || "Flow created successfully",
-              yaml: result.result?.yaml,
-              kestraUrl: result.result?.kestraUrl,
-              flowUrl: result.result?.flowUrl,
-              executionUrl: result.result?.executionUrl,
-            };
+          // If streaming is requested and writer is available
+          // Only stream if writer is available and streaming is enabled
+          if (stream && writer) {
+            // Start the workflow with streaming
+            writer.write({
+              type: "workflow-stream",
+              status: "starting",
+              message: "Starting Kestra flow generation workflow...",
+            });
+
+            try {
+              // Stream the workflow progress
+              const workflowStream = await run.streamVNext({
+                inputData: { namespace: namespace || "company.team" },
+              });
+
+              // Pipe the workflow stream directly to the writer
+              await workflowStream.pipeTo(writer);
+
+              // After streaming is complete, get the final result
+              const finalStatus = await workflowStream.status;
+              const finalResult = await workflowStream.result;
+
+              if (finalStatus === "suspended") {
+                return {
+                  success: true,
+                  status: "suspended",
+                  message:
+                    "Workflow is waiting for your business requirements. Please provide details about the business process you want to automate.",
+                  stepId: finalResult?.suspended?.[0]?.[0] || null,
+                };
+              } else if (finalStatus === "success") {
+                return {
+                  success: true,
+                  status: "complete",
+                  message: finalResult?.message || "Flow created successfully",
+                  yaml: finalResult?.yaml,
+                  kestraUrl: finalResult?.kestraUrl,
+                  flowUrl: finalResult?.flowUrl,
+                  executionUrl: finalResult?.executionUrl,
+                };
+              } else {
+                return {
+                  success: false,
+                  error: finalResult?.error || "Workflow failed",
+                  status: finalStatus,
+                };
+              }
+            } catch (streamError) {
+              const streamErrorMessage =
+                streamError instanceof Error
+                  ? streamError.message
+                  : "Error during workflow streaming";
+              writer.write({
+                type: "workflow-stream",
+                status: "error",
+                message: `Error streaming workflow: ${streamErrorMessage}`,
+              });
+              throw streamError;
+            }
           } else {
-            return {
-              success: false,
-              error: result.error || "Workflow failed",
-              status: result.status,
-            };
+            // Non-streaming execution (fallback)
+            const result = await run.start({
+              inputData: { namespace: namespace || "company.team" },
+            });
+
+            if (result.status === "suspended") {
+              return {
+                success: true,
+                status: "suspended",
+                message:
+                  "Workflow is waiting for your business requirements. Please provide details about the business process you want to automate.",
+                stepId: result.suspended?.[0]?.[0] || null,
+              };
+            } else if (result.status === "success") {
+              return {
+                success: true,
+                status: "complete",
+                message: result.result?.message || "Flow created successfully",
+                yaml: result.result?.yaml,
+                kestraUrl: result.result?.kestraUrl,
+                flowUrl: result.result?.flowUrl,
+                executionUrl: result.result?.executionUrl,
+              };
+            } else {
+              return {
+                success: false,
+                error: result.error || "Workflow failed",
+                status: result.status,
+              };
+            }
           }
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error occurred";
           return {
             success: false,
             error: errorMessage,
@@ -206,13 +227,15 @@ Remember: Your users may not understand YAML or Kestra syntax, so always explain
     }),
     resumeWorkflow: createTool({
       id: "resume-workflow",
-      description: "Resume the Kestra flow generation workflow from a suspended state",
+      description:
+        "Resume the Kestra flow generation workflow from a suspended state with user-provided input and stream progress",
       inputSchema: z.object({
-        stepId: z.string(),
-        businessProcess: z.string().optional(),
-        processGoals: z.string().optional(),
-        approved: z.boolean().optional(),
-        flowFeedback: z.string().optional()
+        stepId: z.string().describe("ID of the suspended step to resume from (e.g., 'get-user-requirements', 'approval')"),
+        businessProcess: z.string().optional().describe("Detailed description of the business process provided by the user"),
+        processGoals: z.string().optional().describe("Key goals and outcomes of the process provided by the user"),
+        approved: z.boolean().optional().describe("Whether the user has approved the generated flow"),
+        flowFeedback: z.string().optional().describe("Feedback provided by the user about the generated flow"),
+        stream: z.boolean().optional().default(true),
       }),
       outputSchema: z.object({
         success: z.boolean(),
@@ -223,64 +246,165 @@ Remember: Your users may not understand YAML or Kestra syntax, so always explain
         kestraUrl: z.string().optional(),
         flowUrl: z.string().optional(),
         executionUrl: z.string().optional(),
-        error: z.string().optional()
+        error: z.string().optional(),
       }),
-      execute: async ({ context, mastra }) => {
-        const { stepId, businessProcess, processGoals, approved, flowFeedback } = context;
+      execute: async ({ context, mastra }, options) => {
+        // Use type assertion to access writer property that exists at runtime
+        const writer = options && (options as any).writer;
+        const {
+          stepId,
+          businessProcess,
+          processGoals,
+          approved,
+          flowFeedback,
+          stream,
+        } = context;
+        
+        // Validate required inputs based on step
+        if (stepId === "get-user-requirements" && (!businessProcess || !processGoals)) {
+          return { 
+            success: false, 
+            error: "Both businessProcess and processGoals are required when resuming from 'get-user-requirements' step" 
+          };
+        }
+        
+        if (stepId === "approval" && (approved === undefined)) {
+          return { 
+            success: false, 
+            error: "The 'approved' field is required when resuming from 'approval' step" 
+          };
+        }
         if (!mastra) {
           return { success: false, error: "Mastra instance not available" };
         }
 
         try {
-          const workflow = mastra.getWorkflow("kestra-flow-generation");
+          const workflow = mastra.getWorkflow("kestraFlowGeneration");
           if (!workflow) {
             return { success: false, error: "Workflow not found" };
           }
 
           const run = await workflow.createRunAsync();
-          let result;
 
+          // Prepare the resume data based on step ID
+          let resumeData;
           if (stepId === "get-user-requirements") {
-            result = await run.resume({
-              step: stepId,
-              resumeData: { businessProcess, processGoals },
-            });
+            resumeData = { businessProcess, processGoals };
           } else if (stepId === "approval") {
-            result = await run.resume({
-              step: stepId,
-              resumeData: { approved, flowFeedback },
-            });
+            resumeData = { approved, flowFeedback };
           } else {
             return { success: false, error: "Unknown step ID" };
           }
 
-          if (result.status === "suspended") {
-            // Still waiting for more user input
-            return {
-              success: true,
-              status: "suspended",
-              message: "Workflow is waiting for additional input.",
-              stepId: result.suspended?.[0]?.[0] || null,
-            };
-          } else if (result.status === "success") {
-            return {
-              success: true,
-              status: "complete",
-              message: result.result?.message || "Flow created successfully",
-              yaml: result.result?.yaml,
-              kestraUrl: result.result?.kestraUrl,
-              flowUrl: result.result?.flowUrl,
-              executionUrl: result.result?.executionUrl,
-            };
+          // If streaming is requested and writer is available
+          // Only stream if writer is available and streaming is enabled
+          if (stream && writer) {
+            // Start the workflow with streaming
+            writer.write({
+              type: "workflow-stream",
+              status: "resuming",
+              message: `Resuming Kestra flow generation workflow from step ${stepId}...`,
+            });
+
+            try {
+              // Stream the workflow progress
+              const workflowStream = await run.streamVNext({
+                step: stepId,
+                resumeData,
+              });
+
+              // Pipe the workflow stream directly to the writer
+              await workflowStream.pipeTo(writer);
+
+              // After streaming is complete, get the final result
+              const finalStatus = await workflowStream.status;
+              const finalResult = await workflowStream.result;
+
+              if (finalStatus === "suspended") {
+                return {
+                  success: true,
+                  status: "suspended",
+                  message: "Workflow is waiting for additional input.",
+                  stepId: finalResult?.suspended?.[0]?.[0] || null,
+                };
+              } else if (finalStatus === "success") {
+                return {
+                  success: true,
+                  status: "complete",
+                  message: finalResult?.message || "Flow created successfully",
+                  yaml: finalResult?.yaml,
+                  kestraUrl: finalResult?.kestraUrl,
+                  flowUrl: finalResult?.flowUrl,
+                  executionUrl: finalResult?.executionUrl,
+                };
+              } else {
+                return {
+                  success: false,
+                  error: finalResult?.error || "Workflow failed",
+                  status: finalStatus,
+                };
+              }
+            } catch (streamError) {
+              const streamErrorMessage =
+                streamError instanceof Error
+                  ? streamError.message
+                  : "Error during workflow streaming";
+              writer.write({
+                type: "workflow-stream",
+                status: "error",
+                message: `Error streaming workflow: ${streamErrorMessage}`,
+              });
+              throw streamError;
+            }
           } else {
-            return {
-              success: false,
-              error: result.error || "Workflow failed",
-              status: result.status,
-            };
+            // Non-streaming execution (fallback)
+            let result;
+
+            if (stepId === "get-user-requirements") {
+              result = await run.resume({
+                step: stepId,
+                resumeData: { businessProcess, processGoals },
+              });
+            } else if (stepId === "approval") {
+              result = await run.resume({
+                step: stepId,
+                resumeData: { approved, flowFeedback },
+              });
+            } else {
+              return { success: false, error: "Unknown step ID" };
+            }
+
+            if (result.status === "suspended") {
+              // Still waiting for more user input
+              return {
+                success: true,
+                status: "suspended",
+                message: "Workflow is waiting for additional input.",
+                stepId: result.suspended?.[0]?.[0] || null,
+              };
+            } else if (result.status === "success") {
+              return {
+                success: true,
+                status: "complete",
+                message: result.result?.message || "Flow created successfully",
+                yaml: result.result?.yaml,
+                kestraUrl: result.result?.kestraUrl,
+                flowUrl: result.result?.flowUrl,
+                executionUrl: result.result?.executionUrl,
+              };
+            } else {
+              return {
+                success: false,
+                error: result.error || "Workflow failed",
+                status: result.status,
+              };
+            }
           }
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : String(error) || "Unknown error occurred";
           return {
             success: false,
             error: errorMessage,
@@ -288,50 +412,167 @@ Remember: Your users may not understand YAML or Kestra syntax, so always explain
         }
       },
     }),
-    useDesignAgent: createTool({
-      id: "use-design-agent",
-      description: "Use the specialized Kestra flow design agent",
+    // useDesignAgent: createTool({
+    //   id: "use-design-agent",
+    //   description: "Use the specialized Kestra flow design agent",
+    //   inputSchema: z.object({
+    //     prompt: z.string(),
+    //   }),
+    //   outputSchema: z.object({
+    //     success: z.boolean(),
+    //     response: z.string().optional(),
+    //     error: z.string().optional(),
+    //   }),
+    //   execute: async ({ context }) => {
+    //     const { prompt } = context;
+    //     try {
+    //       const result = await kestraFlowDesignAgent.generate([
+    //         { role: "user", content: prompt },
+    //       ]);
+    //       return { success: true, response: result.text };
+    //     } catch (error) {
+    //       const errorMessage =
+    //         error instanceof Error
+    //           ? error.message
+    //           : "Failed to use design agent";
+    //       return { success: false, error: errorMessage };
+    //     }
+    //   },
+    // }),
+    // useExecutionAgent: createTool({
+    //   id: "use-execution-agent",
+    //   description: "Use the specialized Kestra flow execution agent",
+    //   inputSchema: z.object({
+    //     prompt: z.string(),
+    //   }),
+    //   outputSchema: z.object({
+    //     success: z.boolean(),
+    //     response: z.string().optional(),
+    //     error: z.string().optional(),
+    //   }),
+    //   execute: async ({ context }) => {
+    //     const { prompt } = context;
+    //     try {
+    //       const result = await kestraFlowExecutionAgent.generate([
+    //         { role: "user", content: prompt },
+    //       ]);
+    //       return { success: true, response: result.text };
+    //     } catch (error) {
+    //       const errorMessage =
+    //         error instanceof Error
+    //           ? error.message
+    //           : "Failed to use execution agent";
+    //       return { success: false, error: errorMessage };
+    //     }
+    //   },
+    // }),
+    checkWorkflowStatus: createTool({
+      id: "check-workflow-status",
+      description: "Check the status of a running Mastra workflow execution",
       inputSchema: z.object({
-        prompt: z.string()
+        executionId: z.string().optional(),
+        stream: z.boolean().optional().default(true),
       }),
       outputSchema: z.object({
         success: z.boolean(),
-        response: z.string().optional(),
-        error: z.string().optional()
+        status: z.string().optional(),
+        message: z.string().optional(),
+        currentStep: z.string().optional(),
+        suspended: z.boolean().optional(),
+        suspendedAt: z.string().optional(),
+        executionId: z.string().optional(),
+        error: z.string().optional(),
       }),
-      execute: async ({ context }) => {
-        const { prompt } = context;
-        try {
-          const result = await kestraFlowDesignAgent.generate([
-            { role: "user", content: prompt },
-          ]);
-          return { success: true, response: result.text };
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Failed to use design agent";
-          return { success: false, error: errorMessage };
+      execute: async ({ context, mastra }, options) => {
+        const writer = options && (options as any).writer;
+        const { executionId, stream } = context;
+
+        if (!mastra) {
+          return { success: false, error: "Mastra instance not available" };
         }
-      },
-    }),
-    useExecutionAgent: createTool({
-      id: "use-execution-agent",
-      description: "Use the specialized Kestra flow execution agent",
-      inputSchema: z.object({
-        prompt: z.string()
-      }),
-      outputSchema: z.object({
-        success: z.boolean(),
-        response: z.string().optional(),
-        error: z.string().optional()
-      }),
-      execute: async ({ context }) => {
-        const { prompt } = context;
+
         try {
-          const result = await kestraFlowExecutionAgent.generate([
-            { role: "user", content: prompt },
-          ]);
-          return { success: true, response: result.text };
+          const workflow = mastra.getWorkflow("kestraFlowGeneration");
+          if (!workflow) {
+            return { success: false, error: "Workflow not found" };
+          }
+
+          if (stream && writer) {
+            writer.write({
+              type: "workflow-stream",
+              status: "checking",
+              message: `Checking status of Mastra workflow execution...`,
+            });
+          }
+
+          // Check if we're looking at a specific execution or the latest one
+          let run;
+          if (executionId) {
+            // In production, this would retrieve a specific run by ID
+            // Since there's no direct API for this, we'll create a new run and check its status
+            // This is just for demonstration; in production, you'd implement proper run storage/retrieval
+            run = await workflow.createRunAsync();
+          } else {
+            // Create a new run to check workflow status
+            run = await workflow.createRunAsync();
+          }
+
+          // Get the current status and result of the workflow
+          const currentStatus = await run.status;
+          let currentResult;
+          try {
+            // Only try to get result if status is not suspended (would throw error)
+            if (currentStatus !== "suspended") {
+              currentResult = await run.result;
+            }
+          } catch (error) {
+            // Ignore result error if workflow is suspended
+          }
+
+          // Build status response
+          const statusResponse = {
+            executionId: executionId || run.id,
+            status: currentStatus,
+            suspended: currentStatus === "suspended",
+            // If suspended, include the suspended step info
+            ...(currentStatus === "suspended" && {
+              currentStep: run.result?.suspended?.[0]?.[0] || "unknown",
+              suspendedAt: run.result?.suspended?.[0]?.[0] || "unknown",
+              message: `Workflow is suspended at step '${run.result?.suspended?.[0]?.[0] || "unknown"}' waiting for input.`,
+            }),
+            // If not suspended, include any result data
+            ...(currentStatus !== "suspended" &&
+              currentResult && {
+                currentStep: "completed",
+                message: `Workflow has ${currentStatus === "success" ? "completed successfully" : "failed"}.`,
+                result: currentResult,
+              }),
+          };
+
+          if (stream && writer) {
+            writer.write({
+              type: "workflow-stream",
+              status: "status",
+              data: statusResponse,
+            });
+          }
+
+          return {
+            success: true,
+            ...statusResponse,
+          };
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Failed to use execution agent";
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to check workflow status";
+          if (stream && writer) {
+            writer.write({
+              type: "workflow-stream",
+              status: "error",
+              message: errorMessage,
+            });
+          }
           return { success: false, error: errorMessage };
         }
       },
