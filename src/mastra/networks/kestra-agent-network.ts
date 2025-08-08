@@ -154,22 +154,27 @@ export const useKestraAgentNetwork = async (input: string, context?: any) => {
 
   // For complex tasks that may require multiple agents
   const response = await kestraAgentNetwork.loop(input, { runtimeContext });
-  
+
   // Process the response to extract any YAML content
-  if (response && typeof response.result === 'string') {
+  if (response && typeof response.result === "string") {
     const yamlFound = extractAndStoreYaml(response.result, runtimeContext);
     if (yamlFound) {
-      console.log('[KESTRA-NETWORK] Extracted YAML content from agent response');
+      console.log(
+        "[KESTRA-NETWORK] Extracted YAML content from agent response"
+      );
     }
   }
-  
+
   return response;
 };
 
 /**
  * Helper function to generate responses with the Kestra agent network
  */
-export const generateWithKestraAgentNetwork = async (input: string, context?: any) => {
+export const generateWithKestraAgentNetwork = async (
+  input: string,
+  context?: any
+) => {
   // Create a new runtime context for this interaction
   const runtimeContext = new RuntimeContext();
 
@@ -179,18 +184,21 @@ export const generateWithKestraAgentNetwork = async (input: string, context?: an
       runtimeContext.set(key, value);
     });
   }
-  
+
   // For single tasks that don't require complex orchestration
   const response = await kestraAgentNetwork.generate(input, { runtimeContext });
-  
+
   // Process the response to extract any YAML content
   if (response) {
-    const responseText = typeof response === 'string' ? response : JSON.stringify(response);
+    const responseText =
+      typeof response === "string" ? response : JSON.stringify(response);
     const yamlFound = extractAndStoreYaml(responseText, runtimeContext);
     if (yamlFound) {
-      console.log('[KESTRA-NETWORK] Extracted YAML content from agent response');
+      console.log(
+        "[KESTRA-NETWORK] Extracted YAML content from agent response"
+      );
     }
   }
-  
+
   return response;
 };

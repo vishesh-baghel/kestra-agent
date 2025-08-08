@@ -242,11 +242,35 @@ export const createFlowTool = createTool({
       const finalNamespace = parsedYaml.namespace || namespace;
       console.log(`[CREATE-FLOW-TOOL] Using namespace: ${finalNamespace}`);
 
-      // Update the YAML with the final flowId
-      const updatedYaml = flowYaml.replace(/^id:\s*.*$/m, `id: ${finalFlowId}`);
-      console.log(
-        `[CREATE-FLOW-TOOL] Updated YAML with flowId: ${finalFlowId}`
-      );
+      // Update the YAML with the final flowId and namespace
+      let updatedYaml = flowYaml.replace(/^id:\s*.*$/m, `id: ${finalFlowId}`);
+      
+      // Ensure namespace is set correctly
+      if (updatedYaml.includes('namespace:')) {
+        updatedYaml = updatedYaml.replace(/^namespace:\s*.*$/m, `namespace: ${finalNamespace}`);
+      } else {
+        // Add namespace if it doesn't exist
+        updatedYaml = `namespace: ${finalNamespace}\n${updatedYaml}`;
+      }
+      
+      console.log(`[CREATE-FLOW-TOOL] Updated YAML with flowId: ${finalFlowId} and namespace: ${finalNamespace}`);
+      console.log(`[CREATE-FLOW-TOOL] YAML content to be sent: \n${updatedYaml}`);
+      
+      // Validate the updated YAML
+      try {
+        const updatedParsedYaml = yaml.parse(updatedYaml);
+        console.log(`[CREATE-FLOW-TOOL] Updated YAML parsed successfully`);
+      } catch (yamlError: any) {
+        console.log(`[CREATE-FLOW-TOOL] Updated YAML parsing failed: ${yamlError.message}`);
+        validationErrors.push(`Updated YAML syntax error: ${yamlError.message}`);
+        return {
+          success: false,
+          namespace: finalNamespace,
+          status: "VALIDATION_FAILED",
+          errors,
+          validationErrors,
+        };
+      }
 
       // Step 3: Create flow in Kestra with retry logic for ID conflicts
       console.log(`[CREATE-FLOW-TOOL] Preparing to create flow in Kestra`);
@@ -258,9 +282,60 @@ export const createFlowTool = createTool({
           `[CREATE-FLOW-TOOL] Attempting to create flow with ID: ${attemptFlowId}`
         );
         try {
+          // Print out the exact content being sent for debugging the 422 error
+          console.log(`[CREATE-FLOW-TOOL] YAML content being submitted:\n${yamlContent}`);
+          
           console.log(
             `[CREATE-FLOW-TOOL] Making API request to ${KESTRA_BASE_URL}/api/v1/flows`
           );
+          
+          // First attempt to validate the YAML structure and fix common issues
+          try {
+            let validateYaml = yaml.parse(yamlContent);
+            console.log(`[CREATE-FLOW-TOOL] YAML validation before sending: Valid`);
+            
+            // Check for required fields per Kestra documentation
+            if (!validateYaml.id) {
+              throw new Error("Missing required 'id' field in flow YAML");
+            }
+            if (!validateYaml.namespace) {
+              throw new Error("Missing required 'namespace' field in flow YAML");
+            }
+            if (!validateYaml.tasks || !Array.isArray(validateYaml.tasks) || validateYaml.tasks.length === 0) {
+              throw new Error("Flow must have at least one task in the 'tasks' array");
+            }
+            
+            // Fix common issues based on known Kestra requirements
+            let yamlModified = false;
+            
+            // Fix retry format - must be an object with type property, not an integer
+            if (validateYaml.tasks) {
+              for (let i = 0; i < validateYaml.tasks.length; i++) {
+                const task = validateYaml.tasks[i];
+                
+                // Check if retry is a simple number and convert to proper format
+                if (task.retry !== undefined && (typeof task.retry === 'number' || typeof task.retry === 'string')) {
+                  const maxAttempt = parseInt(task.retry);
+                  console.log(`[CREATE-FLOW-TOOL] Converting simple retry value ${task.retry} to proper format for task ${task.id}`);
+                  validateYaml.tasks[i].retry = {
+                    type: "constant",
+                    maxAttempt: maxAttempt
+                  };
+                  yamlModified = true;
+                }
+              }
+            }
+            
+            // If we made modifications, regenerate the YAML
+            if (yamlModified) {
+              yamlContent = yaml.stringify(validateYaml);
+              console.log(`[CREATE-FLOW-TOOL] Modified YAML to fix common issues: \n${yamlContent}`);
+            }
+          } catch (validationError: any) {
+            console.log(`[CREATE-FLOW-TOOL] YAML validation error: ${validationError.message}`);
+            // Continue anyway - let the server provide the specific validation error
+          }
+          
           const createResponse = await axios.post(
             `${KESTRA_BASE_URL}/api/v1/flows`,
             yamlContent,
@@ -288,8 +363,24 @@ export const createFlowTool = createTool({
               conflict: true,
               error: `Flow ID '${attemptFlowId}' already exists`,
             };
+          } else if (error.response?.status === 422) {
+            // Validation error - log the detailed error message
+            const errorDetails = error.response?.data || {};
+            console.log(`[CREATE-FLOW-TOOL] Validation error (422): ${JSON.stringify(errorDetails, null, 2)}`);
+            return {
+              success: false,
+              conflict: false,
+              error: `YAML validation failed: ${error.response?.data?.message || error.message}`,
+              details: errorDetails
+            };
           }
+
           console.log(`[CREATE-FLOW-TOOL] API error: ${error.message}`);
+          // Log more details about the error if available
+          if (error.response) {
+            console.log(`[CREATE-FLOW-TOOL] Status: ${error.response.status}`);
+            console.log(`[CREATE-FLOW-TOOL] Response data: ${JSON.stringify(error.response.data, null, 2)}`);
+          }
           return {
             success: false,
             conflict: false,
