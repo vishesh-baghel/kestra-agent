@@ -48,7 +48,32 @@ export function extractAndStoreYaml(text: string, runtimeContext: RuntimeContext
  * @returns The stored YAML content or undefined if not found
  */
 export function getStoredYaml(runtimeContext: RuntimeContext): string | undefined {
-  return runtimeContext.get(FLOW_CONTEXT_KEYS.FLOW_YAML);
+  // Validate runtime context
+  if (!runtimeContext) {
+    console.error("❌ getStoredYaml: No runtime context provided");
+    return undefined;
+  }
+  
+  // Log available context keys for debugging
+  try {
+    console.log("🔍 Available context keys:", JSON.stringify(runtimeContext.keys()));
+  } catch (error) {
+    console.warn("⚠️ Could not list context keys:", error);
+  }
+  
+  // Try to get the YAML
+  try {
+    const yaml = runtimeContext.get(FLOW_CONTEXT_KEYS.FLOW_YAML) as string | undefined;
+    if (yaml) {
+      console.log(`✅ Found YAML in context (${yaml.length} chars)`); 
+    } else {
+      console.log("❌ No YAML found in context with key:", FLOW_CONTEXT_KEYS.FLOW_YAML);
+    }
+    return yaml;
+  } catch (error) {
+    console.error(`❌ Error retrieving YAML from context:`, error);
+    return undefined;
+  }
 }
 
 /**
