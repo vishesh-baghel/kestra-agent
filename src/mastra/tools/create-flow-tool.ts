@@ -5,6 +5,7 @@ import * as yaml from "yaml";
 import { getStoredYaml } from "../utils/yaml-interceptor";
 import { FLOW_CONTEXT_KEYS } from "../context/flow-constants";
 import { RuntimeContext } from "@mastra/core/runtime-context";
+import { getFlowContext } from "../context/flow-context";
 
 const KESTRA_BASE_URL = process.env.KESTRA_BASE_URL || "http://localhost:8100";
 
@@ -74,6 +75,7 @@ export const createFlowTool = createTool({
     // Check if a flowYaml was provided or try to get it from runtime context
     let yamlContent = inputFlowYaml;
 
+    // Try to get YAML from RuntimeContext first
     if (!yamlContent && runtimeContext) {
       try {
         yamlContent = getStoredYaml(runtimeContext);
@@ -82,6 +84,25 @@ export const createFlowTool = createTool({
         }
       } catch (error) {
         console.error("❌ Error retrieving YAML from runtime context:", error);
+      }
+    }
+    
+    // If not found in RuntimeContext, try the KestraFlowContext
+    if (!yamlContent) {
+      try {
+        const flowContext = getFlowContext();
+        yamlContent = flowContext.getFlowYaml();
+        if (yamlContent) {
+          console.log("📄 Using YAML flow definition from KestraFlowContext");
+          
+          // If we found it in KestraFlowContext, also copy it to RuntimeContext if available
+          if (runtimeContext) {
+            runtimeContext.set(FLOW_CONTEXT_KEYS.FLOW_YAML, yamlContent);
+            console.log("📄 Copied YAML from KestraFlowContext to RuntimeContext");
+          }
+        }
+      } catch (error) {
+        console.error("❌ Error retrieving YAML from KestraFlowContext:", error);
       }
     }
 

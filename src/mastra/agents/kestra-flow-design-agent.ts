@@ -6,7 +6,7 @@ import {
   ContentSimilarityMetric,
   ToneConsistencyMetric,
 } from "@mastra/evals/nlp";
-import { kestraDocsTool, webSearchTool } from "../tools";
+import { kestraDocsTool, webSearchTool, saveFlowYamlTool } from "../tools";
 import { pluginKeyTool } from "../tools/plugin-key-tool";
 import { storage, vector, embedder } from "../db";
 
@@ -117,12 +117,13 @@ Step 4: Use the documentation to create the YAML flow
 1. After you complete the YAML generation and present it to the user, ALWAYS include this exact message:
    "I've created the YAML flow definition. Would you like me to automatically create and test this flow in Kestra, or would you prefer to implement it yourself using the generated YAML?"
 2. WAIT for the user's explicit response before proceeding
-3. Make it clear that you can handle the flow creation and testing automatically if they prefer
+3. If the user approves creating and testing the flow, you MUST first call saveFlowYamlTool with the YAML content to ensure it's stored in the shared context for the execution agent
+4. Make it clear that you can handle the flow creation and testing automatically if they prefer
 
 Your primary goal is to produce well-researched, technically correct YAML flow designs that follow best practices and can be implemented by the Kestra Flow Execution Agent.
 `,
   model: openai("gpt-4o-mini"),
-  tools: { pluginKeyTool, kestraDocsTool, webSearchTool },
+  tools: { pluginKeyTool, kestraDocsTool, webSearchTool, saveFlowYamlTool },
   memory: new Memory({
     storage,
     vector,
