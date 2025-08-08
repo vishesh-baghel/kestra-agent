@@ -6,12 +6,12 @@ import {
   ContentSimilarityMetric,
   ToneConsistencyMetric,
 } from "@mastra/evals/nlp";
-import { 
-  createFlowTool, 
-  editFlowTool, 
-  executeFlowTool, 
-  executionStatusTool, 
-  flowViewTool 
+import {
+  createFlowTool,
+  editFlowTool,
+  executeFlowTool,
+  executionStatusTool,
+  flowViewTool,
 } from "../tools";
 import { storage, vector, embedder } from "../db";
 
@@ -90,12 +90,12 @@ If a flow fails:
 Remember: Your users may not understand YAML or Kestra syntax, so always explain things in simple, non-technical terms while ensuring the generated workflows are technically correct and functional.
 `,
   model: openai("gpt-4o-mini"),
-  tools: { 
-    createFlowTool, 
-    editFlowTool, 
-    executeFlowTool, 
-    executionStatusTool, 
-    flowViewTool 
+  tools: {
+    createFlowTool,
+    editFlowTool,
+    executeFlowTool,
+    executionStatusTool,
+    flowViewTool,
   },
   memory: new Memory({
     storage,
