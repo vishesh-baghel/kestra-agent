@@ -86,7 +86,7 @@ export const createFlowTool = createTool({
         console.error("❌ Error retrieving YAML from runtime context:", error);
       }
     }
-    
+
     // If not found in RuntimeContext, try the KestraFlowContext
     if (!yamlContent) {
       try {
@@ -94,15 +94,20 @@ export const createFlowTool = createTool({
         yamlContent = flowContext.getFlowYaml();
         if (yamlContent) {
           console.log("📄 Using YAML flow definition from KestraFlowContext");
-          
+
           // If we found it in KestraFlowContext, also copy it to RuntimeContext if available
           if (runtimeContext) {
             runtimeContext.set(FLOW_CONTEXT_KEYS.FLOW_YAML, yamlContent);
-            console.log("📄 Copied YAML from KestraFlowContext to RuntimeContext");
+            console.log(
+              "📄 Copied YAML from KestraFlowContext to RuntimeContext"
+            );
           }
         }
       } catch (error) {
-        console.error("❌ Error retrieving YAML from KestraFlowContext:", error);
+        console.error(
+          "❌ Error retrieving YAML from KestraFlowContext:",
+          error
+        );
       }
     }
 
@@ -187,7 +192,7 @@ export const createFlowTool = createTool({
       } else {
         console.log(`[CREATE-FLOW-TOOL] Flow ID from YAML: ${parsedYaml.id}`);
       }
-      
+
       // Check for namespace or defaultNamespace field
       if (!parsedYaml.namespace && !parsedYaml.defaultNamespace) {
         console.log(
@@ -290,10 +295,13 @@ export const createFlowTool = createTool({
         // Add namespace if neither exists
         updatedYaml = `namespace: ${finalNamespace}\n${updatedYaml}`;
       }
-      
+
       // If defaultNamespace still exists after the above changes, remove it
       if (updatedYaml.includes("defaultNamespace:")) {
-        updatedYaml = updatedYaml.replace(/^defaultNamespace:\s*.*$(\r?\n)?/m, "");
+        updatedYaml = updatedYaml.replace(
+          /^defaultNamespace:\s*.*$(\r?\n)?/m,
+          ""
+        );
       }
 
       console.log(
@@ -503,7 +511,7 @@ export const createFlowTool = createTool({
       console.log(`[CREATE-FLOW-TOOL] Flow creation successful!`);
 
       // Generate Kestra UI link
-      const kestraUrl = process.env.KESTRA_UI_URL || "http://localhost:8100";
+      const kestraUrl = process.env.KESTRA_BASE_URL || "http://localhost:8100";
       const flowUrl = `${kestraUrl}/ui/main/flows/edit/${finalNamespace}/${finalFlowId}/topology`;
       console.log(`[CREATE-FLOW-TOOL] Generated flow URL: ${flowUrl}`);
 
