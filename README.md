@@ -5,6 +5,12 @@
 
 > Create, validate, and execute Kestra workflows through natural language prompts using Mastra agents.
 
+## Demo
+
+Check out the demo video showing the Kestra Agent in action:
+
+[![Kestra Agent Demo](https://cdn.loom.com/sessions/thumbnails/211c293e489b47d8bfe5972edc7846a4-with-play.gif)](https://www.loom.com/share/211c293e489b47d8bfe5972edc7846a4?sid=7efd5018-444c-42ae-99d2-4832e05f3b46)
+
 ## Overview
 
 The Kestra Agent Template enables users of all technical levels to create and manage data orchestration workflows using natural language. This template integrates Mastra's powerful AI agents with the Kestra orchestration platform to:
@@ -131,12 +137,32 @@ This design ensures each agent focuses on its specialized task while maintaining
 
 ### Environment Variables
 
-| Variable          | Description                            | Required | Default                 |
-| ----------------- | -------------------------------------- | -------- | ----------------------- |
-| `OPENAI_API_KEY`  | Your OpenAI API key                    | Yes      | -                       |
-| `DATABASE_URL`    | SQLite or PostgreSQL connection string | Yes      | -                       |
-| `EXA_API_KEY`     | Exa API key for web search             | No       | -                       |
-| `KESTRA_BASE_URL` | URL to your Kestra instance            | Yes      | `http://localhost:8080` |
+| Variable          | Description                  | Required | Default                 |
+| ----------------- | ---------------------------- | -------- | ----------------------- |
+| `OPENAI_API_KEY`  | Your OpenAI API key          | Yes      | -                       |
+| `DATABASE_URL`    | PostgreSQL connection string | Yes      | -                       |
+| `EXA_API_KEY`     | Exa API key for web search   | No       | -                       |
+| `KESTRA_BASE_URL` | URL to your Kestra instance  | Yes      | `http://localhost:8080` |
+
+### PostgreSQL Database Setup with Supabase
+
+For a quick and easy PostgreSQL database setup, you can use Supabase:
+
+1. **Create a Supabase account**:
+   - Visit [Supabase](https://supabase.com/) and sign up or log in
+   - Create a new project
+
+2. **Get your PostgreSQL connection string**:
+   - Go to Project Settings > Database
+   - Find the connection string under "Connection Pooling"
+   - Copy the connection string that looks like: `postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-ID].supabase.co:5432/postgres`
+
+3. **Update your .env file**:
+   ```
+   DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-ID].supabase.co:5432/postgres
+   ```
+
+This provides a fully managed PostgreSQL database that's perfect for this template without needing to set up a local database.
 
 ### Kestra Instance Setup
 
