@@ -5,7 +5,7 @@ import * as yaml from "yaml";
 import { getStoredYaml } from "../utils/yaml-interceptor";
 import { FLOW_CONTEXT_KEYS } from "../context/flow-constants";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { getFlowContext } from "../context/flow-context";
+import { getFlowContext, KestraFlowContext } from "../context/flow-context";
 
 const KESTRA_BASE_URL = process.env.KESTRA_BASE_URL || "http://localhost:8100";
 
@@ -71,52 +71,107 @@ export const createFlowTool = createTool({
     const namespace = contextParams.namespace;
     const flowId = contextParams.flowId;
     const flowPurpose = contextParams.flowPurpose;
-    const runtimeContext: RuntimeContext | undefined = ctx?.runtimeContext;
-    // Check if a flowYaml was provided or try to get it from runtime context
-    let yamlContent = inputFlowYaml;
-
-    // Try to get YAML from RuntimeContext first
-    if (!yamlContent && runtimeContext) {
+    // Get the shared KestraFlowContext singleton
+    const flowContext = getFlowContext();
+    // Get the actual RuntimeContext from the tool execution context
+    const runtimeContext = ctx?.runtimeContext as RuntimeContext | undefined;
+    // First check RuntimeContext for flow YAML data
+    let yamlContent: string | undefined;
+    
+    // Check the actual RuntimeContext first if available
+    if (runtimeContext) {
       try {
         yamlContent = getStoredYaml(runtimeContext);
         if (yamlContent) {
-          console.log("📄 Using YAML flow definition from runtime context");
+          console.log("📄 Using YAML flow definition from RuntimeContext");
         }
       } catch (error) {
-        console.error("❌ Error retrieving YAML from runtime context:", error);
+        console.error("❌ Error retrieving YAML from RuntimeContext:", error);
       }
+    } else {
+      console.log("RuntimeContext not available in tool context");
     }
     
-    // If not found in RuntimeContext, try the KestraFlowContext
+    console.log("KestraFlowContext YAML:", flowContext.getFlowYaml() ? "available" : "not available");
+    // Second, check KestraFlowContext if not found in RuntimeContext
     if (!yamlContent) {
       try {
-        const flowContext = getFlowContext();
         yamlContent = flowContext.getFlowYaml();
         if (yamlContent) {
           console.log("📄 Using YAML flow definition from KestraFlowContext");
-          
-          // If we found it in KestraFlowContext, also copy it to RuntimeContext if available
+
+          // If found in KestraFlowContext and we have RuntimeContext, copy it there for future use
           if (runtimeContext) {
             runtimeContext.set(FLOW_CONTEXT_KEYS.FLOW_YAML, yamlContent);
-            console.log("📄 Copied YAML from KestraFlowContext to RuntimeContext");
+            console.log(
+              "📄 Copied YAML from KestraFlowContext to RuntimeContext"
+            );
           }
         }
       } catch (error) {
-        console.error("❌ Error retrieving YAML from KestraFlowContext:", error);
+        console.error(
+          "❌ Error retrieving YAML from KestraFlowContext:",
+          error
+        );
+      }
+    }
+
+    // Finally, if not found in either context, use the input parameters
+    if (!yamlContent && inputFlowYaml) {
+      yamlContent = inputFlowYaml;
+      console.log("📄 Using YAML flow definition from direct input parameters");
+      
+      // When using direct input, we should store it in both contexts for future reference
+      // This ensures consistency even if the tool is called with direct parameters
+      try {
+        // Store in KestraFlowContext (yamlContent must be defined here since we're in the if block)
+        if (yamlContent) {
+          flowContext.setFlowYaml(yamlContent);
+          console.log("📄 Copied direct input YAML to KestraFlowContext for consistency");
+        }
+        
+        // Store in RuntimeContext if available
+        if (runtimeContext) {
+          runtimeContext.set(FLOW_CONTEXT_KEYS.FLOW_YAML, yamlContent);
+          console.log("📄 Copied direct input YAML to RuntimeContext for consistency");
+        }
+      } catch (error) {
+        console.error("❌ Error storing direct input YAML to contexts:", error);
       }
     }
 
     // Store the flowId and namespace in runtime context if available
     if (runtimeContext) {
-      try {
+      if (flowId) {
         runtimeContext.set(FLOW_CONTEXT_KEYS.FLOW_ID, flowId);
-        runtimeContext.set(FLOW_CONTEXT_KEYS.FLOW_NAMESPACE, namespace);
-        console.log(`Stored flow ID and namespace in runtime context`);
-      } catch (error) {
-        // Non-fatal error, just log it
-        console.warn(`Could not store flow ID in runtime context:`, error);
       }
+      if (namespace) {
+        runtimeContext.set(FLOW_CONTEXT_KEYS.FLOW_NAMESPACE, namespace);
+      }
+      console.log("Stored flow ID and namespace in runtime context");
     }
+    
+    // Comprehensive diagnostic logging to trace where YAML came from
+    console.log("=== CREATE FLOW TOOL YAML SOURCE DIAGNOSTICS ===");
+    console.log("YAML from direct input:", inputFlowYaml ? `${inputFlowYaml.length} chars` : "not provided");
+    
+    // Safely check RuntimeContext
+    const runtimeContextYaml = runtimeContext ? getStoredYaml(runtimeContext) : undefined;
+    console.log("YAML from RuntimeContext:", runtimeContextYaml ? "available" : "not available");
+    
+    // Check KestraFlowContext
+    const kestraContextYaml = flowContext.getFlowYaml();
+    console.log("YAML from KestraFlowContext:", kestraContextYaml ? "available" : "not available");
+    
+    // Determine the source of the final YAML content
+    let yamlSource = "unknown";
+    if (yamlContent === inputFlowYaml && inputFlowYaml) yamlSource = "direct input";
+    else if (runtimeContextYaml && yamlContent === runtimeContextYaml) yamlSource = "RuntimeContext";
+    else if (kestraContextYaml && yamlContent === kestraContextYaml) yamlSource = "KestraFlowContext";
+    
+    console.log("Final YAML source:", yamlSource);
+    console.log("Final YAML length:", yamlContent ? yamlContent.length : 0);
+    console.log("=== END DIAGNOSTICS ===");
 
     // If we still don't have YAML, return an error
     if (!yamlContent) {
@@ -187,7 +242,7 @@ export const createFlowTool = createTool({
       } else {
         console.log(`[CREATE-FLOW-TOOL] Flow ID from YAML: ${parsedYaml.id}`);
       }
-      
+
       // Check for namespace or defaultNamespace field
       if (!parsedYaml.namespace && !parsedYaml.defaultNamespace) {
         console.log(
@@ -290,10 +345,13 @@ export const createFlowTool = createTool({
         // Add namespace if neither exists
         updatedYaml = `namespace: ${finalNamespace}\n${updatedYaml}`;
       }
-      
+
       // If defaultNamespace still exists after the above changes, remove it
       if (updatedYaml.includes("defaultNamespace:")) {
-        updatedYaml = updatedYaml.replace(/^defaultNamespace:\s*.*$(\r?\n)?/m, "");
+        updatedYaml = updatedYaml.replace(
+          /^defaultNamespace:\s*.*$(\r?\n)?/m,
+          ""
+        );
       }
 
       console.log(

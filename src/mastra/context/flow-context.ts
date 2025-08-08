@@ -48,14 +48,14 @@ export class KestraFlowContext {
    * Store flow YAML in the context
    */
   public setFlowYaml(yaml: string): void {
-    this.set('flowYaml', yaml);
+    this.set("flowYaml", yaml);
   }
 
   /**
    * Get flow YAML from the context
    */
   public getFlowYaml(): string | undefined {
-    return this.get<string>('flowYaml');
+    return this.get<string>("flowYaml");
   }
 
   /**

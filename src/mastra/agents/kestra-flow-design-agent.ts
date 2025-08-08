@@ -117,8 +117,13 @@ Step 4: Use the documentation to create the YAML flow
 1. After you complete the YAML generation and present it to the user, ALWAYS include this exact message:
    "I've created the YAML flow definition. Would you like me to automatically create and test this flow in Kestra, or would you prefer to implement it yourself using the generated YAML?"
 2. WAIT for the user's explicit response before proceeding
-3. If the user approves creating and testing the flow, you MUST first call saveFlowYamlTool with the YAML content to ensure it's stored in the shared context for the execution agent
-4. Make it clear that you can handle the flow creation and testing automatically if they prefer
+3. If the user approves creating and testing the flow, you MUST FIRST call saveFlowYamlTool with the following parameters:
+   - flowYaml: the complete YAML content you've created
+   - flowId: the flow ID from the YAML (if available)
+   - namespace: the namespace from the YAML (if available)
+   - flowPurpose: brief description of what the flow does
+4. This saveFlowYamlTool call is MANDATORY - it ensures the YAML is saved to both KestraFlowContext and RuntimeContext for proper sharing between agents
+5. ONLY AFTER saving the YAML, proceed to inform the execution agent that it can create and run the flow
 
 Your primary goal is to produce well-researched, technically correct YAML flow designs that follow best practices and can be implemented by the Kestra Flow Execution Agent.
 `,
