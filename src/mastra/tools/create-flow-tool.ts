@@ -14,7 +14,7 @@ const KESTRA_BASE_URL = process.env.KESTRA_BASE_URL || "http://localhost:8100";
 function generateRandomFlowId(): string {
   const timestamp = Date.now().toString(36);
   const randomSuffix = Math.random().toString(36).substring(2, 8);
-  return `flow-${timestamp}-${randomSuffix}`;
+  return `flow_${timestamp}_${randomSuffix}`;
 }
 
 /**
@@ -166,13 +166,21 @@ export const createFlowTool = createTool({
       } else {
         console.log(`[CREATE-FLOW-TOOL] Flow ID from YAML: ${parsedYaml.id}`);
       }
-
-      if (!parsedYaml.namespace) {
+      
+      // Check for namespace or defaultNamespace field
+      if (!parsedYaml.namespace && !parsedYaml.defaultNamespace) {
         console.log(
           `[CREATE-FLOW-TOOL] Validation error: Missing 'namespace' field`
         );
         validationErrors.push("Flow must have a 'namespace' field");
       } else {
+        // If defaultNamespace exists but namespace doesn't, use defaultNamespace
+        if (parsedYaml.defaultNamespace && !parsedYaml.namespace) {
+          console.log(
+            `[CREATE-FLOW-TOOL] Found 'defaultNamespace' instead of 'namespace', will convert during processing`
+          );
+          parsedYaml.namespace = parsedYaml.defaultNamespace;
+        }
         console.log(
           `[CREATE-FLOW-TOOL] Namespace from YAML: ${parsedYaml.namespace}`
         );
@@ -225,14 +233,14 @@ export const createFlowTool = createTool({
         const baseId = flowPurpose
           ? flowPurpose
               .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/^-+|-+$/g, "")
+              .replace(/[^a-z0-9]+/g, "_")
+              .replace(/^_+|_+$/g, "")
           : parsedYaml.id || "flow";
 
         // Add unique timestamp and random suffix
         const timestamp = Date.now().toString(36);
         const randomSuffix = Math.random().toString(36).substring(2, 5);
-        finalFlowId = `${baseId}-${timestamp}-${randomSuffix}`;
+        finalFlowId = `${baseId}_${timestamp}_${randomSuffix}`;
 
         console.log(
           `[CREATE-FLOW-TOOL] Generated unique descriptive flowId: ${finalFlowId}`
@@ -245,15 +253,26 @@ export const createFlowTool = createTool({
       // Update the YAML with the final flowId and namespace
       let updatedYaml = flowYaml.replace(/^id:\s*.*$/m, `id: ${finalFlowId}`);
 
-      // Ensure namespace is set correctly
+      // Ensure namespace is set correctly and handle defaultNamespace if present
       if (updatedYaml.includes("namespace:")) {
         updatedYaml = updatedYaml.replace(
           /^namespace:\s*.*$/m,
           `namespace: ${finalNamespace}`
         );
+      } else if (updatedYaml.includes("defaultNamespace:")) {
+        // Replace defaultNamespace with namespace
+        updatedYaml = updatedYaml.replace(
+          /^defaultNamespace:\s*.*$/m,
+          `namespace: ${finalNamespace}`
+        );
       } else {
-        // Add namespace if it doesn't exist
+        // Add namespace if neither exists
         updatedYaml = `namespace: ${finalNamespace}\n${updatedYaml}`;
+      }
+      
+      // If defaultNamespace still exists after the above changes, remove it
+      if (updatedYaml.includes("defaultNamespace:")) {
+        updatedYaml = updatedYaml.replace(/^defaultNamespace:\s*.*$(\r?\n)?/m, "");
       }
 
       console.log(
