@@ -9,7 +9,7 @@
 
 Check out the demo video showing the Kestra Agent in action:
 
-[![Kestra Agent Demo](https://cdn.loom.com/sessions/thumbnails/211c293e489b47d8bfe5972edc7846a4-with-play.gif)](https://www.loom.com/share/211c293e489b47d8bfe5972edc7846a4?sid=7efd5018-444c-42ae-99d2-4832e05f3b46)
+[![Kestra Agent Demo](https://cdn.loom.com/sessions/thumbnails/211c293e489b47d8bfe5972edc7846a4-with-play.gif)](https://www.loom.com/share/211c293e489b47d8bfe5972edc7846a4?sid=7efd5018-444c-42ae-99d2-4832e05f3b46)(https://www.loom.com/share/211c293e489b47d8bfe5972edc7846a4?sid=dfc9ebee-d7cc-471d-8b35-beb1337524ee)
 
 ## Overview
 
