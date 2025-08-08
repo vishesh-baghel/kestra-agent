@@ -7,6 +7,7 @@ import {
   ToneConsistencyMetric,
 } from "@mastra/evals/nlp";
 import { kestraDocsTool, webSearchTool } from "../tools";
+import { pluginKeyTool } from "../tools/plugin-key-tool";
 import { storage, vector, embedder } from "../db";
 
 export const kestraFlowDesignAgent = new Agent({
@@ -55,15 +56,14 @@ When researching Kestra syntax, follow this sequence:
 - Document assumptions and configuration requirements
 
 ## Tool Usage Guidelines:
-- **kestraDocsTool**: 
-  1. Use with SINGLE focused keywords (e.g., "log" not "log task") 
-  2. Always check the relatedTasks array for alternatives if your first search doesn't yield good results
-  3. Use the most specific task type name when you know it
-
-- **webSearchTool**: Use for:
-  1. Researching industry best practices for business processes
-  2. Finding examples of Kestra YAML ONLY when kestraDocsTool and its relatedTasks don't provide useful examples
-  3. Understanding patterns and approaches for specific automations
+- First use pluginKeyTool with descriptive keywords (e.g., "http", "s3", "database") to find relevant plugin keys.
+- Then use kestraDocsTool with the specific plugin key to get detailed documentation.
+- If the pluginKeyTool doesn't return relevant keys, try alternative keywords or synonyms.
+- If the kestraDocsTool query doesn't return relevant results, check the relatedTasks array for alternative plugin types.
+- Only use webSearchTool as a fallback if both plugin tools fail to provide useful documentation.
+- Do not use google.com, as it will be blocked. Instead use other search engines like duckduckgo.com or search.brave.com.
+- Do not make multiple tool calls with the same keyword.
+- Limit total tool calls to 6 per user request.
 
 ## YAML Output Format:
 - Ensure proper indentation and structure
@@ -80,7 +80,7 @@ When researching Kestra syntax, follow this sequence:
 Your primary goal is to produce well-researched, technically correct YAML flow designs that follow best practices and can be implemented by the Kestra Flow Execution Agent.
 `,
   model: openai("gpt-4o-mini"),
-  tools: { kestraDocsTool, webSearchTool },
+  tools: { pluginKeyTool, kestraDocsTool, webSearchTool },
   memory: new Memory({
     storage,
     vector,

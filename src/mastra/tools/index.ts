@@ -5,3 +5,4 @@ export * from "./execute-flow-tool";
 export * from "./execution-status-tool";
 export * from "./flow-view-tool";
 export * from "./web-search-tool";
+export * from "./plugin-key-tool";

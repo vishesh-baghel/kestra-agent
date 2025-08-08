@@ -320,6 +320,7 @@ export const kestraDocsTool = createTool({
   inputSchema: z.object({
     query: z
       .string()
+      .optional()
       .describe(
         "What you want to learn about Kestra (e.g., 'log', 'http', 's3', 'email')"
       ),
@@ -384,7 +385,7 @@ export const kestraDocsTool = createTool({
         }
       } else {
         // Provide general flow information based on query
-        const queryLower = query.toLowerCase();
+        const queryLower = query?.toLowerCase() || '';
 
         if (
           queryLower.includes("flow") ||
