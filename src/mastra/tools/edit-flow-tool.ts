@@ -138,7 +138,7 @@ export const editFlowTool = createTool({
       console.log(`[EDIT-FLOW-TOOL] Checking if flow exists: ${namespace}/${flowId}`);
       try {
         const existsResponse = await axios.get(
-          `${KESTRA_BASE_URL}/api/v1/main/flows/${namespace}/${flowId}`
+          `${KESTRA_BASE_URL}/api/v1/flows/${namespace}/${flowId}`
         );
         console.log(`[EDIT-FLOW-TOOL] Flow exists check successful: ${existsResponse.status}`);
 
@@ -189,9 +189,9 @@ export const editFlowTool = createTool({
       // Step 4: Update flow in Kestra
       console.log(`[EDIT-FLOW-TOOL] Updating flow in Kestra: ${namespace}/${flowId}`);
       try {
-        console.log(`[EDIT-FLOW-TOOL] Making PUT request to ${KESTRA_BASE_URL}/api/v1/main/flows/${namespace}/${flowId}`);
+        console.log(`[EDIT-FLOW-TOOL] Making PUT request to ${KESTRA_BASE_URL}/api/v1/flows/${namespace}/${flowId}`);
         const updateResponse = await axios.put(
-          `${KESTRA_BASE_URL}/api/v1/main/flows/${namespace}/${flowId}`,
+          `${KESTRA_BASE_URL}/api/v1/flows/${namespace}/${flowId}`,
           flowYaml,
           {
             headers: {

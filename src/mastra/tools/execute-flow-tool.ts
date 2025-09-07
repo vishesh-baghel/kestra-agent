@@ -44,22 +44,32 @@ export const executeFlowTool = createTool({
     console.log(`[EXECUTE-FLOW-TOOL] Starting execution with params:`);
     console.log(`[EXECUTE-FLOW-TOOL] - namespace: ${namespace}`);
     console.log(`[EXECUTE-FLOW-TOOL] - flowId: ${flowId}`);
-    console.log(`[EXECUTE-FLOW-TOOL] - inputs: ${inputs ? JSON.stringify(inputs) : '<not provided>'}`);
-    
+    console.log(
+      `[EXECUTE-FLOW-TOOL] - inputs: ${inputs ? JSON.stringify(inputs) : "<not provided>"}`
+    );
+
     const errors: string[] = [];
 
     try {
       // Step 1: Check if flow exists
-      console.log(`[EXECUTE-FLOW-TOOL] Checking if flow exists: ${namespace}/${flowId}`);
+      console.log(
+        `[EXECUTE-FLOW-TOOL] Checking if flow exists: ${namespace}/${flowId}`
+      );
       try {
-        console.log(`[EXECUTE-FLOW-TOOL] Making API request to ${KESTRA_BASE_URL}/api/v1/flows/${namespace}/${flowId}`);
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Making API request to ${KESTRA_BASE_URL}/api/v1/flows/${namespace}/${flowId}`
+        );
         const existsResponse = await axios.get(
           `${KESTRA_BASE_URL}/api/v1/flows/${namespace}/${flowId}`
         );
 
-        console.log(`[EXECUTE-FLOW-TOOL] Flow exists check response: ${existsResponse.status}`);
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Flow exists check response: ${existsResponse.status}`
+        );
         if (existsResponse.status !== 200) {
-          console.log(`[EXECUTE-FLOW-TOOL] Flow not found with status ${existsResponse.status}`);
+          console.log(
+            `[EXECUTE-FLOW-TOOL] Flow not found with status ${existsResponse.status}`
+          );
           errors.push(
             `Flow ${namespace}/${flowId} does not exist. Create it first using create-flow-tool.`
           );
@@ -71,7 +81,9 @@ export const executeFlowTool = createTool({
             errors,
           };
         }
-        console.log(`[EXECUTE-FLOW-TOOL] Flow exists, proceeding with execution`);
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Flow exists, proceeding with execution`
+        );
       } catch (checkError: any) {
         if (checkError.response?.status === 404) {
           console.log(`[EXECUTE-FLOW-TOOL] Flow not found (404)`);
@@ -86,10 +98,10 @@ export const executeFlowTool = createTool({
             errors,
           };
         } else {
-          console.log(`[EXECUTE-FLOW-TOOL] API error checking flow: ${checkError.message}`);
-          errors.push(
-            `Error checking flow existence: ${checkError.message}`
+          console.log(
+            `[EXECUTE-FLOW-TOOL] API error checking flow: ${checkError.message}`
           );
+          errors.push(`Error checking flow existence: ${checkError.message}`);
           return {
             success: false,
             flowId,
@@ -101,51 +113,73 @@ export const executeFlowTool = createTool({
       }
 
       // Step 2: Execute the flow
-      console.log(`[EXECUTE-FLOW-TOOL] Preparing to execute flow: ${namespace}/${flowId}`);
+      console.log(
+        `[EXECUTE-FLOW-TOOL] Preparing to execute flow: ${namespace}/${flowId}`
+      );
       try {
-        const executeUrl = `${KESTRA_BASE_URL}/api/v1/main/executions/${namespace}/${flowId}`;
+        const executeUrl = `${KESTRA_BASE_URL}/api/v1/executions/${namespace}/${flowId}`;
         console.log(`[EXECUTE-FLOW-TOOL] Execution URL: ${executeUrl}`);
-        
+
         // Prepare form data for multipart/form-data as required by Kestra API
         const formData = new FormData();
         if (inputs) {
-          console.log(`[EXECUTE-FLOW-TOOL] Adding inputs to form data:`, inputs);
+          console.log(
+            `[EXECUTE-FLOW-TOOL] Adding inputs to form data:`,
+            inputs
+          );
           Object.entries(inputs).forEach(([key, value]) => {
             formData.append(key, String(value));
-            console.log(`[EXECUTE-FLOW-TOOL] - Added input: ${key}=${String(value)}`);
+            console.log(
+              `[EXECUTE-FLOW-TOOL] - Added input: ${key}=${String(value)}`
+            );
           });
         } else {
           console.log(`[EXECUTE-FLOW-TOOL] No inputs provided for execution`);
         }
-        
-        console.log(`[EXECUTE-FLOW-TOOL] Sending execution request to Kestra API`);
+
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Sending execution request to Kestra API`
+        );
         const executeResponse = await axios.post(executeUrl, formData, {
           headers: {
             "Content-Type": "multipart/form-data",
           },
         });
-        console.log(`[EXECUTE-FLOW-TOOL] Execution request successful with status: ${executeResponse.status}`);
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Execution request successful with status: ${executeResponse.status}`
+        );
 
         const execution = executeResponse.data;
         const executionId = execution.id;
-        console.log(`[EXECUTE-FLOW-TOOL] Execution created with ID: ${executionId}`);
-        const executionUrl = `${KESTRA_BASE_URL}/ui/main/executions/${namespace}/${flowId}/${executionId}`;
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Execution created with ID: ${executionId}`
+        );
+        const executionUrl = `${KESTRA_BASE_URL}/ui/executions/${namespace}/${flowId}/${executionId}`;
         console.log(`[EXECUTE-FLOW-TOOL] Execution URL: ${executionUrl}`);
 
         // Wait a moment for execution to start
-        console.log(`[EXECUTE-FLOW-TOOL] Waiting for execution to initialize...`);
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Waiting for execution to initialize...`
+        );
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
         // Get updated execution status
         console.log(`[EXECUTE-FLOW-TOOL] Fetching current execution status`);
         const statusResponse = await axios.get(
-          `${KESTRA_BASE_URL}/api/v1/main/executions/${executionId}`
+          `${KESTRA_BASE_URL}/api/v1/executions/${executionId}`
         );
         const currentStatus = statusResponse.data.state.current;
-        console.log(`[EXECUTE-FLOW-TOOL] Current execution status: ${currentStatus}`);
-        console.log(`[EXECUTE-FLOW-TOOL] Full execution state:`, statusResponse.data.state);
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Current execution status: ${currentStatus}`
+        );
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Full execution state:`,
+          statusResponse.data.state
+        );
 
-        console.log(`[EXECUTE-FLOW-TOOL] Execution successfully initiated, returning results`);
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Execution successfully initiated, returning results`
+        );
         return {
           success: true,
           executionId,
@@ -158,7 +192,9 @@ export const executeFlowTool = createTool({
       } catch (executeError: any) {
         const errorMessage =
           executeError.response?.data?.message || executeError.message;
-        console.log(`[EXECUTE-FLOW-TOOL] Flow execution failed: ${errorMessage}`);
+        console.log(
+          `[EXECUTE-FLOW-TOOL] Flow execution failed: ${errorMessage}`
+        );
         errors.push(`Failed to execute flow: ${errorMessage}`);
 
         return {

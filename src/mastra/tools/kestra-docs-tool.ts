@@ -42,7 +42,7 @@ interface TaskDocInfo {
 }
 
 // Global cache for plugin data
-const KESTRA_API_BASE_URL = "http://localhost:8100/api/v1/main";
+const KESTRA_API_BASE_URL = "http://localhost:8085/api/v1";
 let pluginCache: PluginCache | null = null;
 
 /**
@@ -385,7 +385,7 @@ export const kestraDocsTool = createTool({
         }
       } else {
         // Provide general flow information based on query
-        const queryLower = query?.toLowerCase() || '';
+        const queryLower = query?.toLowerCase() || "";
 
         if (
           queryLower.includes("flow") ||

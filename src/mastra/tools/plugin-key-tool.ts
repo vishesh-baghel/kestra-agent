@@ -4,10 +4,10 @@ import axios from "axios";
 
 // Configuration
 // Check if we need to append the API path
-const baseUrl = process.env.KESTRA_BASE_URL || "http://localhost:8100";
-const KESTRA_API_BASE_URL = baseUrl.endsWith("/api/v1/main")
+const baseUrl = process.env.KESTRA_BASE_URL || "http://localhost:8085";
+const KESTRA_API_BASE_URL = baseUrl.endsWith("/api/v1")
   ? baseUrl
-  : `${baseUrl}/api/v1/main`;
+  : `${baseUrl}/api/v1`;
 
 // Add debug logging flag for easier troubleshooting
 const DEBUG = process.env.DEBUG_PLUGIN_KEY_TOOL || false;
