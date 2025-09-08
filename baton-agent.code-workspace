@@ -1,11 +1,13 @@
 {
-	"folders": [
-		{
-			"path": "."
-		},
-		{
-			"path": "../baton-agent-ui"
-		}
-	],
-	"settings": {}
+  "folders": [
+    {
+      "path": ".",
+    },
+    {
+      "path": "../baton-agent-ui",
+    },
+  ],
+  "settings": {
+    "postman.settings.dotenv-detection-notification-visibility": false,
+  },
 }
